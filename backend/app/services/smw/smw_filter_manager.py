@@ -1,0 +1,2 @@
+class SMWFilterManager:
+    pass
