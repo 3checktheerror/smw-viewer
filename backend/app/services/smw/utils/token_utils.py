@@ -51,6 +51,17 @@ class TokenUtils:
             old_tokens = {item['token'] for item in old_token_results if item['is_old']}
             logging.info(f"老币token数量：{len(old_tokens)}")
 
+            # --- 新增日志 ---
+            total_tokens_in_chain = len(token_addresses)
+            if total_tokens_in_chain > 0:
+                low_liquidity_pct = (len(low_liquidity_tokens) / total_tokens_in_chain) * 100
+                honeypot_pct = (len(honeypot_tokens) / total_tokens_in_chain) * 100
+                old_pct = (len(old_tokens) / total_tokens_in_chain) * 100
+                logging.info(f"链 {chain} 统计: "
+                             f"低流动性: {len(low_liquidity_tokens)} ({low_liquidity_pct:.2f}%), "
+                             f"貔貅: {len(honeypot_tokens)} ({honeypot_pct:.2f}%), "
+                             f"老币: {len(old_tokens)} ({old_pct:.2f}%)")
+
             processed_tokens = set()
 
             for token_address in token_addresses:
@@ -105,7 +116,7 @@ if __name__ == '__main__':
 
         # 3. 调用函数
         if wallet_list:
-            bad_tokens = TokenUtils.get_wallet_group_bad_tokens(wallet_list, 111)
+            bad_tokens = TokenUtils.get_wallet_group_bad_tokens(wallet_list)
             logging.info(f"Found {len(bad_tokens)} bad tokens.")
 
             # 4. 结果入库

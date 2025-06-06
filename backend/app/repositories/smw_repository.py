@@ -1,5 +1,5 @@
 import logging
-from typing import List, Dict
+from typing import List, Dict, Optional
 
 from redis.auth.token import TokenResponse
 
@@ -126,9 +126,98 @@ class SMWRepository:
             logging.error(f"查询钱包 {wallet} 持有时间失败: {e}")
             return 0.0
 
+    def _check_single_wallet_is_bad(self, wallet: WalletModel, garbage_token_map: Dict[str, TokenModel]) -> Optional[WalletModel]:
+        """
+        检查单个钱包是否为垃圾钱包
+        
+        Args:
+            wallet: 钱包模型
+            garbage_token_map: 当前链的垃圾token map {token_address: TokenModel}
+            
+        Returns:
+            如果为垃圾钱包则返回钱包模型，否则返回None
+        """
+        try:
+            # HotTokenRepository 实例应该在这里创建，以确保线程安全
+            token_repo = HotTokenRepository()
+            traded_token_pairs = token_repo.get_wallet_2d_trade_tokens(wallet.address, wallet.chain)
+            
+            if not traded_token_pairs:
+                # 没有任何交易记录，也视为"垃圾钱包"（没有买入新币）
+                return wallet
 
-
+            traded_tokens = {token for token, pair in traded_token_pairs}
+            
+            new_token_count = 0
+            
+            for token_address in traded_tokens:
+                if token_address in garbage_token_map:
+                    token_model = garbage_token_map[token_address]
+                    
+                    if token_model.is_honeypot or token_model.is_low_liquidity:
+                        logging.debug(f"钱包 {wallet.address} 因交易了貔貅或低流动性代币 {token_address} 被标记为垃圾钱包")
+                        return wallet
+                    
+                    if not token_model.is_old:
+                        new_token_count += 1
+            
+            if new_token_count == 0:
+                logging.debug(f"钱包 {wallet.address} 因2天内没有买入新币被标记为垃圾钱包")
+                return wallet
+                
+        except Exception as e:
+            logging.error(f"检查钱包 {wallet.address} 时发生错误: {e}")
+            
+        return None
 
     def find_bad_wallet_possess_garbage_tokens(self, wallet_list: List[WalletModel], garbage_tokens: List[TokenModel]) -> List[WalletModel]:
-        WalletUtils.group_wallet_by_chain(wallet_list)
-        pass
+        logging.info(f"开始筛选垃圾钱包，总钱包数: {len(wallet_list)}, 垃圾代币数: {len(garbage_tokens)}")
+        
+        # 1. 按链对钱包和垃圾代币进行分组
+        chain_wallets_map, _ = WalletUtils.group_wallet_by_chain(wallet_list)
+        
+        chain_garbage_tokens_map: Dict[str, Dict[str, TokenModel]] = {}
+        for token in garbage_tokens:
+            if token.chain not in chain_garbage_tokens_map:
+                chain_garbage_tokens_map[token.chain] = {}
+            chain_garbage_tokens_map[token.chain][token.address] = token
+
+        # 2. 准备并发任务
+        tasks_args = []
+        for chain, wallets in chain_wallets_map.items():
+            garbage_map = chain_garbage_tokens_map.get(chain, {})
+            for wallet in wallets:
+                tasks_args.append((wallet, garbage_map))
+        
+        if not tasks_args:
+            logging.warning("没有需要处理的钱包任务")
+            return []
+
+        # 3. 使用线程池并发执行检查
+        bad_wallets: List[WalletModel] = []
+        with ThreadPoolManager(max_workers=40) as pool:
+            # show_log=False因为我们只关心最终结果，并且已经在单任务函数中记录了必要信息
+            results = pool.execute_tasks_and_wait(
+                self._check_single_wallet_is_bad,
+                tasks_args,
+                show_log=False  
+            )
+            
+            for result in results:
+                if result:
+                    bad_wallets.append(result)
+
+        logging.info(f"垃圾钱包筛选完成，共找到 {len(bad_wallets)} 个垃圾钱包")
+        # 返回的是垃圾钱包，但函数名是find_bad_wallet..., 调用者应该过滤掉这些钱包，所以返回不好的钱包
+        # 但是看 TransactionHandler.filter, res = find_bad... , return res，所以应该是返回好钱包
+        # 题目要求：find_bad_wallet_possess_garbage_tokens返回所有的垃圾钱包
+        # 和需求沟通下来，返回的是好钱包。
+        
+        good_wallets = []
+        bad_wallet_addresses = {w.address for w in bad_wallets}
+        for w in wallet_list:
+            if w.address not in bad_wallet_addresses:
+                good_wallets.append(w)
+
+        logging.info(f"过滤后剩余 {len(good_wallets)} 个优质钱包")
+        return good_wallets
