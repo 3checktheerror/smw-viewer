@@ -113,5 +113,5 @@ class TransactionHandler:
 
         # 第二步：过滤持有低流动性代币的钱包 + 过滤买入貔貅币钱包 + 过滤2天内没有买入新币钱包
         logging.info("开始根据垃圾代币进行钱包过滤...")
-        res = SMWRepository().find_bad_wallet_possess_garbage_tokens(stats_filtered, garbage_tokens)
+        res = SMWRepository().filter_bad_wallet_possess_garbage_tokens(stats_filtered, garbage_tokens)
         return res

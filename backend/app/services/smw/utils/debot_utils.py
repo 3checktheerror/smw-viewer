@@ -250,15 +250,15 @@ class DebotAPIUtils:
                 tag_map = data.get("tag_map", {}) or {}
                 now_utc = datetime.now(timezone.utc)
                 midnight_utc = datetime(now_utc.year, now_utc.month, now_utc.day, tzinfo=timezone.utc)
-                three_days_ago_midnight_utc = midnight_utc - timedelta(days=3)
-                three_days_ago = int(three_days_ago_midnight_utc.timestamp())
+                five_days_ago_midnight_utc = midnight_utc - timedelta(days=5)
+                five_days_ago = int(five_days_ago_midnight_utc.timestamp())
                 creation_timestamp = int(meta.get("creation_timestamp", 0))
                 graduated_timestamp = int(tag_map.get("graduated", 0))
 
                 if graduated_timestamp > 0:
-                    is_old = graduated_timestamp < three_days_ago
+                    is_old = graduated_timestamp < five_days_ago
                 else:
-                    is_old = creation_timestamp > 0 and creation_timestamp < three_days_ago
+                    is_old = creation_timestamp > 0 and creation_timestamp < five_days_ago
 
                 return {
                     "is_old": is_old,

@@ -26,7 +26,7 @@ class WalletRepository:
 
         
         with ThreadPoolManager(max_workers=30) as pool:
-            results = pool.execute_tasks_and_wait(query_token_wallets, task_args, show_log=False)
+            results = pool.execute_tasks_and_wait(query_token_wallets, task_args, show_log=True)
         
         token_wallets = {}
         for result in results:
