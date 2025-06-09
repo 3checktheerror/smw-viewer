@@ -38,7 +38,7 @@ class HotTokenRepository:
         return stream_key.split(":")[-1] if ":" in stream_key else stream_key
     
     def get_previous_day_tokens(self) -> Dict[str, List[str]]:
-        prev_date = TimeUtils.get_prev_bg_date()
+        prev_date = TimeUtils.get_prev_date()
         
         onchain_tokens = self.mongodb_client.find_many(
             settings.daily_onchain_token_collection,

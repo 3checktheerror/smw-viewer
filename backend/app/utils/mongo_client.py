@@ -115,12 +115,8 @@ class MongoDBClient:
                 
             cursor = collection.find(filter_dict or {}, query_projection).batch_size(batch_size)
             documents = []
-            count = 0
             for doc in cursor:
                 documents.append(doc)
-                count += 1
-                if count > 0:
-                    logging.info(f"Fetched {count} documents from {collection_name}...")
             
             logging.info(f"Found a total of {len(documents)} documents in collection '{collection_name}'")
             return documents

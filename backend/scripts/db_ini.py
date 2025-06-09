@@ -63,14 +63,32 @@ def init_token_collections():
 
 
         que1_collection = mongo_client.get_collection(settings.queue_1,settings.queue_db)
+        que2_collection = mongo_client.get_collection(settings.queue_2,settings.queue_db)
+        que3_collection = mongo_client.get_collection(settings.queue_3,settings.queue_db)
         if que1_collection is not None:
-            # 创建复合唯一索引 {chain, date, token}
             que1_collection.create_index(
                 [("chain", 1), ("address", 1)],
                 unique=True,
-                name="idx_chain_wallet_unique"
+                name="idx_chain_address_unique"
             )
-            logging.info(f"Created unique compound index for {settings.daily_rank_token_collection}")
+            logging.info(f"Created unique compound index for {settings.queue_1}")
+
+        if que2_collection is not None:
+            que2_collection.create_index(
+                [("chain", 1), ("address", 1)],
+                unique=True,
+                name="idx_chain_address_unique"
+            )
+            logging.info(f"Created unique compound index for {settings.queue_2}")
+
+
+        if que3_collection is not None:
+            que3_collection.create_index(
+                [("chain", 1), ("address", 1)],
+                unique=True,
+                name="idx_chain_address_unique"
+            )
+            logging.info(f"Created unique compound index for {settings.queue_3}")
 
         else:
             logging.error(f"Failed to get collection {settings.daily_rank_token_collection}")

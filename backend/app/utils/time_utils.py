@@ -37,6 +37,11 @@ class TimeUtils:
         yesterday_shanghai = datetime.now(ZoneInfo("Asia/Shanghai")) - timedelta(days=1)
         return yesterday_shanghai.strftime('%Y-%m-%d')
 
+    @staticmethod
+    def get_prev_date() -> str:
+        yesterday_shanghai = datetime.now(timezone.utc) - timedelta(days=1)
+        return yesterday_shanghai.strftime('%Y-%m-%d')
+
 
     @staticmethod
     def get_prev_utc_0_hour_ts() -> int:

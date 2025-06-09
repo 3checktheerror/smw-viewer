@@ -17,6 +17,7 @@ class WalletRepository:
     
     def get_token_wallets(self, token_list: List[str], chain: str) -> Dict[str, List[str]]:
         start_time, end_time = TimeUtils.get_prev_utc_day_time_range()
+        logging.info(f"get wallet from timestamp {start_time} to {end_time}")
         
         def query_token_wallets(token: str) -> tuple[str, List[str]]:
             wallets = self.pg_client.get_distinct_wallets_by_token(chain, token, start_time, end_time)

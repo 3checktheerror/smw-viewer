@@ -5,10 +5,13 @@ from typing import List, Dict
 from backend.app.core.config import settings
 from backend.app.domain.models.wallet import WalletModel
 from backend.app.services.smw.smw_filter_manager import SMWFilterManager
+from backend.app.services.smw.smw_filter_utils import SMWFilterUtils
 from backend.app.services.smw.smw_statistic_manager import SMWStatisticManager
+from backend.app.tasks.base_wallet_finder_tasks import BaseWalletFinderTask
 from backend.app.utils.log_utils import setup_logging
 from backend.app.utils.mongo_client import MongoDBClient
 from backend.app.utils.time_utils import TimeUtils
+from collections import defaultdict
 
 
 class SMWQueueHandlerTask:
@@ -37,96 +40,88 @@ class SMWQueueHandlerTask:
         mongo_client = MongoDBClient()
 
         q_db = settings.queue_db
-        q1 = settings.queue_1
-        q2 = settings.queue_2
-        q3 = settings.queue_3
+        q1_name, q2_name, q3_name = settings.queue_1, settings.queue_2, settings.queue_3
+        queues = [q1_name, q2_name, q3_name]
 
         report_data = {}
+        logging.info(f"SMW Queue processing started for date: {in_date}")
 
-        # 1. Get initial state of all queues for the report
-        q1_initial_data = mongo_client.find_many(collection_name=q1, db_name=q_db)
-        report_data['initial_queue_1'] = [WalletModel(**w) for w in q1_initial_data]
-        q2_initial_data = mongo_client.find_many(collection_name=q2, db_name=q_db)
-        report_data['initial_queue_2'] = [WalletModel(**w) for w in q2_initial_data]
-        q3_initial_data = mongo_client.find_many(collection_name=q3, db_name=q_db)
-        report_data['initial_queue_3'] = [WalletModel(**w) for w in q3_initial_data]
-        
-        logging.info(f"Processing wallets for date: {in_date}")
+        # 1. Get initial state of all queues for reporting and processing
+        initial_wallets_docs = {q_name: mongo_client.find_many(collection_name=q_name, db_name=q_db) for q_name in queues}
 
-        # 2. Eliminate from queue_3
-        _, rejected_q3_low, rejected_q3_tx = SMWFilterManager.shuffle_smw_queue_routine(
-            in_db_name=q_db, in_collection_name=q3, in_date=in_date, out_db_name=q_db
-        )
-        report_data['eliminated_from_queue_3'] = rejected_q3_low + rejected_q3_tx
+        report_data['initial_queue_1'] = [WalletModel(**w) for w in initial_wallets_docs[q1_name]]
+        report_data['initial_queue_2'] = [WalletModel(**w) for w in initial_wallets_docs[q2_name]]
+        report_data['initial_queue_3'] = [WalletModel(**w) for w in initial_wallets_docs[q3_name]]
 
-        # 3. Demote from queue_2 to queue_3
-        _, demoted_from_q2_low, demoted_from_q2_tx = SMWFilterManager.shuffle_smw_queue_routine(
-            in_db_name=q_db, in_collection_name=q2, in_date=in_date, out_db_name=q_db
-        )
-        demoted_from_q2 = demoted_from_q2_low + demoted_from_q2_tx
-        report_data['demoted_from_queue_2_to_3'] = demoted_from_q2
-        if demoted_from_q2:
-            demoted_docs = []
-            for wallet in demoted_from_q2:
-                doc = wallet.model_dump()
-                doc['stored_date'] = in_date
-                doc['updated_date'] = in_date
-                demoted_docs.append(doc)
-            mongo_client.insert_many(collection_name=q3, documents=demoted_docs, db_name=q_db)
+        q1_wallets = [WalletModel(**w) for w in initial_wallets_docs[q1_name]]
+        q2_wallets = [WalletModel(**w) for w in initial_wallets_docs[q2_name]]
+        q3_wallets = [WalletModel(**w) for w in initial_wallets_docs[q3_name]]
 
-        # 4. Demote from queue_1 to queue_2
-        _, demoted_from_q1_low, demoted_from_q1_tx = SMWFilterManager.shuffle_smw_queue_routine(
-            in_db_name=q_db, in_collection_name=q1, in_date=in_date, out_db_name=q_db
-        )
-        demoted_from_q1 = demoted_from_q1_low + demoted_from_q1_tx
-        report_data['demoted_from_queue_1_to_2'] = demoted_from_q1
-        if demoted_from_q1:
-            demoted_docs = []
-            for wallet in demoted_from_q1:
-                doc = wallet.model_dump()
-                doc['stored_date'] = in_date
-                doc['updated_date'] = in_date
-                demoted_docs.append(doc)
-            mongo_client.insert_many(collection_name=q2, documents=demoted_docs, db_name=q_db)
-            
-        # 5. Promote from queue_2 to queue_1
-        promoted_from_q2, _, _ = SMWFilterManager.shuffle_smw_queue_routine(
-            in_db_name=q_db, in_collection_name=q2, in_date=in_date, 
-            out_db_name=q_db, out_collection_name=q1
-        )
-        report_data['promoted_from_queue_2_to_1'] = promoted_from_q2
-        if promoted_from_q2:
-            delete_filter = {
-                "stored_date": in_date,
-                "$or": [{"chain": w.chain, "address": w.address} for w in promoted_from_q2]
-            }
-            mongo_client.delete_many(collection_name=q2, filter_dict=delete_filter, db_name=q_db)
+        wallets_to_add = defaultdict(list)
+        wallets_to_delete = defaultdict(list)
 
-        # 6. Promote from queue_3 to queue_2
-        promoted_from_q3, _, _ = SMWFilterManager.shuffle_smw_queue_routine(
-            in_db_name=q_db, in_collection_name=q3, in_date=in_date,
-            out_db_name=q_db, out_collection_name=q2
-        )
-        report_data['promoted_from_queue_3_to_2'] = promoted_from_q3
-        if promoted_from_q3:
-            delete_filter = {
-                "stored_date": in_date,
-                "$or": [{"chain": w.chain, "address": w.address} for w in promoted_from_q3]
-            }
-            mongo_client.delete_many(collection_name=q3, filter_dict=delete_filter, db_name=q_db)
+        # 2. Process Q1: Demotion for rejected wallets
+        logging.info(f"Processing {len(q1_wallets)} wallets from queue 1...")
+        if q1_wallets:
+            _, rejected_q1_low, rejected_q1_tx = SMWFilterUtils.start_filter(q1_wallets)
+            demoted_from_q1 = rejected_q1_low + rejected_q1_tx
+            report_data['demoted_from_queue_1_to_2'] = demoted_from_q1
+            wallets_to_add[q2_name].extend(demoted_from_q1)
+            wallets_to_delete[q1_name].extend(demoted_from_q1)
 
-        # 7. Supply new wallets to queue_2
-        SMWFilterManager.supply_smw_routine(in_date=in_date)
+        # 3. Process Q2: Promotion for final, Demotion for rejected
+        logging.info(f"Processing {len(q2_wallets)} wallets from queue 2...")
+        if q2_wallets:
+            promoted_from_q2, rejected_q2_low, rejected_q2_tx = SMWFilterUtils.start_filter(q2_wallets)
+            demoted_from_q2 = rejected_q2_low + rejected_q2_tx
+            report_data['promoted_from_queue_2_to_1'] = promoted_from_q2
+            report_data['demoted_from_queue_2_to_3'] = demoted_from_q2
+            wallets_to_add[q1_name].extend(promoted_from_q2)
+            wallets_to_add[q3_name].extend(demoted_from_q2)
+            wallets_to_delete[q2_name].extend(q2_wallets)
 
-        # 8. Generate SMW buy statistics
-        logging.info("Generating SMW buy statistics for queue_1 wallets...")
-        q1_wallets_data = mongo_client.find_many(collection_name=q1, db_name=q_db)
-        if q1_wallets_data:
-            SMWStatisticManager.get_smw_avg_buy_statistics(wallet_data_list=q1_wallets_data)
+        # 4. Process Q3: Promotion for final, Elimination for rejected
+        logging.info(f"Processing {len(q3_wallets)} wallets from queue 3...")
+        if q3_wallets:
+            promoted_from_q3, rejected_q3_low, rejected_q3_tx = SMWFilterUtils.start_filter(q3_wallets)
+            eliminated_from_q3 = rejected_q3_low + rejected_q3_tx
+            report_data['promoted_from_queue_3_to_2'] = promoted_from_q3
+            report_data['eliminated_from_queue_3'] = eliminated_from_q3
+            wallets_to_add[q2_name].extend(promoted_from_q3)
+            wallets_to_delete[q3_name].extend(q3_wallets)
+
+        # 5. Apply database changes
+        logging.info("Applying database changes...")
+        for q_name, wallets in wallets_to_delete.items():
+            if wallets:
+                delete_filter = {
+                    "$or": [{"chain": w.chain, "address": w.address} for w in wallets]
+                }
+                deleted_count = mongo_client.delete_many(collection_name=q_name, filter_dict=delete_filter, db_name=q_db)
+                logging.info(f"Deleted {deleted_count} wallets from {q_name}.")
+
+        for q_name, wallets in wallets_to_add.items():
+            if wallets:
+                docs = [
+                    {**wallet.model_dump(), 'updated_date': in_date}
+                    for wallet in wallets
+                ]
+                mongo_client.insert_many(collection_name=q_name, documents=docs, db_name=q_db)
+                logging.info(f"Inserted {len(docs)} wallets into {q_name}.")
+
+        # 6. Supply new wallets to queue_2
+        logging.info("Supplying new wallets to queue_2...")
+        SMWFilterManager.supply_smw_routine()
+
+        # 7. Generate SMW buy statistics for the new state of queue_1
+        logging.info("Generating SMW buy statistics for queue_1...")
+        q1_updated_data = mongo_client.find_many(collection_name=q1_name, db_name=q_db)
+        if q1_updated_data:
+            SMWStatisticManager.get_smw_avg_buy_statistics(wallet_data_list=q1_updated_data)
         else:
             logging.info("Queue 1 is empty. Skipping statistics generation.")
 
-        # 9. Generate report
+        # 8. Generate and write the final report
         SMWQueueHandlerTask._write_report(report_data)
 
         logging.info("Daily queue shuffle and supply process finished.")
@@ -134,4 +129,5 @@ class SMWQueueHandlerTask:
 
 if __name__ == '__main__':
     setup_logging()
+    BaseWalletFinderTask().run()
     SMWQueueHandlerTask.daily_queue_shuffle_and_supply()
