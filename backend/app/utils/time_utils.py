@@ -25,6 +25,12 @@ class TimeUtils:
         now_shanghai = datetime.now(ZoneInfo("Asia/Shanghai"))
         formatted_date_shanghai = now_shanghai.strftime('%Y-%m-%d')
         return formatted_date_shanghai
+
+    @staticmethod
+    def get_cur_date() -> str:
+        now_utc = datetime.now(timezone.utc)
+        formatted_date_utc = now_utc.strftime('%Y-%m-%d')
+        return formatted_date_utc
     
     @staticmethod
     def get_prev_bg_date() -> str:

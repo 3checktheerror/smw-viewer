@@ -1,12 +1,14 @@
+import time
 from typing import Dict, Any, List, Tuple, Optional
 import logging
 from datetime import datetime, timezone, timedelta
-
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from backend.app.utils.http_utils import DebotHTTPUtils
 from backend.app.utils.thread_pool import ThreadPoolManager
 
 
 class DebotAPIUtils:
+
 
     @staticmethod
     def get_wallet_7d_token(wallet: str, chain: str) -> Dict[str, Any]:
@@ -275,3 +277,98 @@ class DebotAPIUtils:
             results = pool.execute_tasks_and_wait(_check_token_age, tasks_args, show_log=False)
 
             return [res for res in results if res is not None]
+
+
+    @staticmethod
+    def get_wallet_avg_buy(self, wallet: str, chain: str, tokens: set) -> Dict[str, Any]:
+
+        STABLECOINS = {
+            "solana": [
+                "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",  # USDT
+                "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",  # USDC
+                "9zNQRsGLjNKwCUU5Gq5LR8beUCPzQMVMqKAi3SSZh54u",
+                "2b1kV6DkPAnxd5ixfnxCpjxmKwqjjaYmCZfHsFu24GXo",
+                "9gP2kCy3wA1ctvYWQk75guqXuHfrEomqydHLtcTCqiLa",
+                "So11111111111111111111111111111111111111112"    # SOL
+            ],
+            "base": [
+                "0x4200000000000000000000000000000000000006",  # WETH
+                "0xd07379a755a8f11b57610154861d694b2a0f615a"  # Base
+            ],
+            "bsc": [
+                "0x90c97f71e18723b0cf0dfa30ee176ab653e89f40",
+                "0x40af3827f39d0eacbf4a168f8d4ee67c121d11c9",
+                "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c"
+            ]
+        }
+
+
+        """获取并计算持仓代币统计信息"""
+        total_buy_times = 0
+        stable_buy_volumes_sum = 0.0
+        stable_buy_times_sum = 0
+        next_cursor = ""
+
+        # 预处理地址集合
+        target_tokens = {t.lower() for t in tokens}
+        stable_coins = {c.lower() for c in STABLECOINS.get(chain, [])}
+
+        for _ in range(self.max_pages):
+            try:
+                params = {
+                    "chain": chain,
+                    "wallet": wallet,
+                    "sort_field": "last_active_timestamp",
+                    "sort_order": "desc",
+                    "next": next_cursor
+                }
+
+                response = self.client.get(
+                    "https://preapi.debot.ai/api/dashboard/wallet/latest/pnl",
+                    params=params,
+                    timeout=self.timeout
+                )
+
+                if not response:
+                    break
+
+                data = response.json() or {}
+                page_data = data.get("data") or {}
+                holding_tokens = page_data.get("holding_tokens", [])
+
+                # 处理当前页数据
+                for item in holding_tokens:
+                    token_info = item.get("token", {})
+                    token_addr = token_info.get("address", "").lower()
+
+                    # 统计目标token
+                    if token_addr in target_tokens:
+                        total_buy_times += item.get("buy_times", 0)
+
+                    # 统计稳定币
+                    if token_addr in stable_coins:
+                        stable_buy_volumes_sum += item.get("buy_volume", 0)
+                        stable_buy_times_sum += item.get("buy_times", 0)
+
+                # 检查退出条件（7天）
+                if holding_tokens:
+                    current_time = time.time()
+                    last_token = holding_tokens[-1]
+                    last_active = last_token.get("last_active_timestamp", 0)
+
+                    if current_time - last_active > 604802:  # 7天+2秒缓冲
+                        break
+
+                next_cursor = page_data.get("next", "")
+                if not next_cursor:
+                    break
+
+            except Exception as e:
+                logging.error(f"HoldingTokens fetch failed: {str(e)}")
+                break
+
+        return {
+            "total_buy_times": total_buy_times,
+            "stable_buy_volumes_sum": round(stable_buy_volumes_sum, 4),
+            "stable_buy_times_sum": stable_buy_times_sum
+        }

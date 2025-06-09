@@ -114,7 +114,7 @@ if __name__ == '__main__':
                 wallet_list.append(WalletModel(
                     chain=doc['chain'],
                     address=doc['address'],
-                    group="default",
+                    group_id= 111,
                     priority=0
                 ))
             else:

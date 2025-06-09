@@ -78,9 +78,12 @@ class MongoDBClient:
         collection = self.get_collection(collection_name, db_name)
         if collection is None:
             return []
+        if not documents:
+            return []
         
         try:
             result = collection.insert_many(documents)
+            logging.info(f"Inserted {len(result.inserted_ids)} documents into {collection_name}")
             return [str(id_) for id_ in result.inserted_ids]
         except PyMongoError as e:
             logging.error(f"Error inserting documents to {collection_name}: {e}")
@@ -99,17 +102,28 @@ class MongoDBClient:
             return None
     
     def find_many(self, collection_name: str, filter_dict: Dict[str, Any] = None, 
-                  limit: int = None, db_name: str = None) -> List[Dict]:
+                  projection: Optional[Dict[str, Any]] = None, db_name: str = None, batch_size: int = 3000) -> List[Dict]:
         """查找多个文档"""
         collection = self.get_collection(collection_name, db_name)
         if collection is None:
             return []
         
         try:
-            cursor = collection.find(filter_dict or {})
-            if limit:
-                cursor = cursor.limit(limit)
-            return list(cursor)
+            query_projection = projection.copy() if projection is not None else {}
+            if '_id' not in query_projection:
+                query_projection['_id'] = 0
+                
+            cursor = collection.find(filter_dict or {}, query_projection).batch_size(batch_size)
+            documents = []
+            count = 0
+            for doc in cursor:
+                documents.append(doc)
+                count += 1
+                if count > 0:
+                    logging.info(f"Fetched {count} documents from {collection_name}...")
+            
+            logging.info(f"Found a total of {len(documents)} documents in collection '{collection_name}'")
+            return documents
         except PyMongoError as e:
             logging.error(f"Error finding documents in {collection_name}: {e}")
             return []
@@ -148,6 +162,20 @@ class MongoDBClient:
             logging.error(f"Error deleting document from {collection_name}: {e}")
             return False
     
+    def delete_many(self, collection_name: str, filter_dict: Dict[str, Any], db_name: str = None) -> int:
+        """删除多个文档"""
+        collection = self.get_collection(collection_name, db_name)
+        if collection is None:
+            return 0
+        
+        try:
+            result = collection.delete_many(filter_dict)
+            logging.info(f"Deleted {result.deleted_count} documents from {collection_name}")
+            return result.deleted_count
+        except PyMongoError as e:
+            logging.error(f"Error deleting documents from {collection_name}: {e}")
+            return 0
+
     def close(self):
         """关闭连接"""
         if self._client:

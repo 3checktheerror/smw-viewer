@@ -13,6 +13,12 @@ class Settings(BaseSettings):
     app_name: str = Field(default="Smart Wallet Dashboard", description="APP_NAME")
     app_version: str = Field(default="1.0.0", description="APP_VERSION")
     debug: bool = Field(default=True, description="DEBUG")
+
+    # 3级队列配置
+    queue_db: str = Field(default="smw", description="smw 3 layer queue db")
+    queue_1: str = Field(default="que_1", description="Top smart wallet queue")
+    queue_2: str = Field(default="que_2", description="Middle smart wallet queue")
+    queue_3: str = Field(default="que_3", description="Down smart wallet queue")
     
     # MongoDB 配置
     mongodb_url: str = Field(default="mongodb://debot_wallet:debot_wallet_123@23.239.109.74:27017/?retryWrites=true&w=majority&appName=Cluster0")

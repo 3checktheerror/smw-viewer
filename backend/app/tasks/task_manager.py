@@ -12,6 +12,7 @@ from apscheduler.triggers.interval import IntervalTrigger
 from backend.app.tasks.base_wallet_finder_tasks import BaseWalletFinderTask
 from backend.app.core.config import settings
 from backend.app.tasks.hot_token_finder_tasks import HotTokenFinder
+from backend.app.tasks.smw_daily_process import SMWQueueDailyProcessTask
 from backend.app.utils.log_utils import setup_logging
 
 
@@ -34,22 +35,22 @@ class TaskManager:
         )
         logging.info(f"Scheduled task 'find_daily_token_task' to run every {settings.find_daily_token_interval_minutes} minutes")
 
-        # self.scheduler.add_job(
-        #     func=self.find_daily_smw_task,
-        #     trigger=CronTrigger(hour=0, minute=0, second=10, timezone='Asia/Shanghai'
-        #     ),
-        #     id='find_daily_smw_task',
-        #     name='Find Daily Smart Wallet Task',
-        #     replace_existing=True,
-        # )
-        # logging.info(f"Scheduled task 'find_daily_wallet_task' to run every 24 hours")
+        self.scheduler.add_job(
+            func=self.find_daily_smw_task,
+            trigger=CronTrigger(hour=0, minute=0, second=10, timezone='UTC'
+            ),
+            id='find_daily_smw_task',
+            name='Find Daily Smart Wallet Task',
+            replace_existing=True,
+        )
+        logging.info(f"Scheduled task 'find_daily_wallet_task' to run every 24 hours")
 
 
     def find_daily_token_task(self):
         self.hot_token_finder.run_scan_cycle()
 
     def find_daily_smw_task(self):
-        self.base_wallet_finder.run()
+        SMWQueueDailyProcessTask.process_daily_smw()
 
 
     def start_scheduler(self):

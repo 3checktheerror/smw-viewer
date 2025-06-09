@@ -32,14 +32,14 @@ class BaseWalletFinderTask:
             logging.error(f"Error in BaseWalletFinderTask.run: {e}")
     
     def _save_daily_wallets(self, chain: str, wallets: List[str]):
-        current_ts = TimeUtils.get_current_ts()
+        cur_dt = TimeUtils.get_cur_date()
         
         documents = []
         for wallet in wallets:
             documents.append({
                 'chain': chain,
-                'wallet': wallet,
-                'stored_time': current_ts
+                'address': wallet,
+                'stored_date': cur_dt
             })
         
         if documents:
