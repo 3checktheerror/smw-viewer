@@ -41,7 +41,7 @@ class SMWRepository:
         tasks_args = [(wallet, chain) for wallet in wallet_list]
         
         # 使用ThreadPoolManager进行并发查询
-        with ThreadPoolManager(max_workers=20) as pool:
+        with ThreadPoolManager(max_workers=40) as pool:
             results = pool.execute_tasks_and_wait(
                 self._query_single_wallet_holding_time, 
                 tasks_args,
@@ -195,7 +195,6 @@ class SMWRepository:
         # 3. 使用线程池并发执行检查
         bad_wallets: List[WalletModel] = []
         with ThreadPoolManager(max_workers=40) as pool:
-            # show_log=False因为我们只关心最终结果，并且已经在单任务函数中记录了必要信息
             results = pool.execute_tasks_and_wait(
                 self._check_single_wallet_is_bad,
                 tasks_args,

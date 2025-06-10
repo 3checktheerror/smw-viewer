@@ -89,7 +89,7 @@ class PostgreSQLClient:
         query = f"""
             SELECT DISTINCT token, wallet
             FROM {table_name}
-            WHERE token IN %(tokens)s AND op = 'buy' AND unix_time >= %(start_time)s AND unix_time <= %(end_time)s
+            WHERE token IN %(tokens)s AND op = 'buy' AND unix_time >= %(start_time)s AND unix_time <= %(end_time)s and volume >= 50
         """
         
         params_dict = {
