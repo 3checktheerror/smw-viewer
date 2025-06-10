@@ -39,7 +39,9 @@ class BaseWalletFinderTask:
             documents.append({
                 'chain': chain,
                 'address': wallet,
-                'stored_date': cur_dt
+                'stored_date': cur_dt,
+                'group_id': 1,
+                'priority': 0
             })
         
         if documents:

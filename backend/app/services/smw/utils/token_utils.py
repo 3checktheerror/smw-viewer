@@ -37,13 +37,12 @@ class TokenUtils:
 
             token_addresses = [item[0] for item in trade_tokens_with_pair]
 
-            low_liquidity_tokens = set()
-            honeypot_tokens = set()
-            if chain == 'bsc':
-                # 低流动性
-                low_liquidity_tokens = set(DebotAPIUtils.get_low_liquidity_tokens(trade_tokens_with_pair, chain))
-                logging.info(f"低流动性token数量：{len(low_liquidity_tokens)}")
+            # 低流动性
+            low_liquidity_tokens = set(DebotAPIUtils.get_low_liquidity_tokens(trade_tokens_with_pair, chain))
+            logging.info(f"低流动性token数量：{len(low_liquidity_tokens)}")
 
+            honeypot_tokens = set()
+            if chain is not 'solana':
                 # 貔貅
                 tokens_for_honeypot_check = [token for token in token_addresses if token not in low_liquidity_tokens]
                 honeypot_tokens = set(DebotAPIUtils.get_honeypot_tokens(tokens_for_honeypot_check, chain))
@@ -58,15 +57,17 @@ class TokenUtils:
             total_tokens_in_chain = len(token_addresses)
             if total_tokens_in_chain > 0:
                 old_pct = (len(old_tokens) / total_tokens_in_chain) * 100
-                if chain == 'bsc':
-                    low_liquidity_pct = (len(low_liquidity_tokens) / total_tokens_in_chain) * 100
+                low_liquidity_pct = (len(low_liquidity_tokens) / total_tokens_in_chain) * 100
+                if chain is not 'solana':
                     honeypot_pct = (len(honeypot_tokens) / total_tokens_in_chain) * 100
                     logging.info(f"链 {chain} 统计: "
                                  f"低流动性: {len(low_liquidity_tokens)} ({low_liquidity_pct:.2f}%), "
                                  f"貔貅: {len(honeypot_tokens)} ({honeypot_pct:.2f}%), "
                                  f"老币: {len(old_tokens)} ({old_pct:.2f}%)")
                 else:
-                    logging.info(f"链 {chain} 统计: 老币: {len(old_tokens)} ({old_pct:.2f}%)")
+                    logging.info(f"链 {chain} 统计: "
+                                 f"低流动性: {len(low_liquidity_tokens)} ({low_liquidity_pct:.2f}%), "
+                                 f"老币: {len(old_tokens)} ({old_pct:.2f}%)")
 
             processed_tokens = set()
 

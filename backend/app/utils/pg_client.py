@@ -79,6 +79,37 @@ class PostgreSQLClient:
             logging.error(f"Error querying wallets for token {token} on {chain}: {e}")
             return []
 
+    def get_distinct_wallets_by_tokens(self, chain: str, tokens: List[str], start_time: int, end_time: int) -> Dict[str, List[str]]:
+        if not tokens:
+            return {}
+            
+        table_name = f"t_transaction_daily_{chain}"
+        tokens_tuple = tuple(tokens)
+        
+        query = f"""
+            SELECT DISTINCT token, wallet
+            FROM {table_name}
+            WHERE token IN %(tokens)s AND op = 'buy' AND unix_time >= %(start_time)s AND unix_time <= %(end_time)s
+        """
+        
+        params_dict = {
+            'tokens': tokens_tuple,
+            'start_time': start_time, 
+            'end_time': end_time
+        }
+        
+        try:
+            result = self.execute(query, params_dict)
+            
+            token_wallets = {token: [] for token in tokens}
+            for token, wallet in result:
+                if token in token_wallets:
+                    token_wallets[token].append(wallet)
+            return token_wallets
+        except Exception as e:
+            logging.error(f"Error querying wallets for tokens on {chain}: {e}")
+            return {}
+
     def close(self):
         """关闭连接池"""
         try:

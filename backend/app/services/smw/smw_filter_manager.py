@@ -72,7 +72,7 @@ class SMWFilterManager:
         wallets_data = mongo_client.find_many(
             collection_name=in_collection_name,
             db_name=in_db_name,
-            filter_dict={'date': in_date},
+            filter_dict={'stored_date': in_date},
             batch_size=20000
         )
 

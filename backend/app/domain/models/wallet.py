@@ -4,5 +4,5 @@ from pydantic import BaseModel
 class WalletModel(BaseModel):
     chain: str
     address: str
-    group_id: int
-    priority: int
+    group_id: int = 1
+    priority: int = 0
