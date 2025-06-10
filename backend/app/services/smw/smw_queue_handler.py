@@ -102,9 +102,13 @@ class SMWQueueHandlerTask:
 
         for q_name, wallets in wallets_to_add.items():
             if wallets:
+                # De-duplicate wallets before insertion
+                unique_wallets_map = {(w.address, w.chain): w for w in wallets}
+                unique_wallets = list(unique_wallets_map.values())
+
                 docs = [
                     {**wallet.model_dump(), 'updated_date': in_date}
-                    for wallet in wallets
+                    for wallet in unique_wallets
                 ]
                 mongo_client.insert_many(collection_name=q_name, documents=docs, db_name=q_db)
                 logging.info(f"Inserted {len(docs)} wallets into {q_name}.")

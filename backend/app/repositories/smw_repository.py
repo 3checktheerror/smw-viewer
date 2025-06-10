@@ -1,5 +1,6 @@
 import logging
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Tuple
+from collections import defaultdict
 
 from redis.auth.token import TokenResponse
 
@@ -21,6 +22,70 @@ class SMWRepository:
         self.pg_client = PostgreSQLClient()
         self.token_repository = HotTokenRepository()
     
+    def get_avg_holding_time_batch(self, wallets: List[WalletModel]) -> Dict[Tuple[str, str], float]:
+        if not wallets:
+            return {}
+
+        wallet_holding_times = {(w.address, w.chain): 0.0 for w in wallets}
+        
+        # 按链对钱包进行分组
+        wallets_by_chain = WalletUtils.group_wallet_by_chain(wallets)[0]
+
+        for chain, addresses in wallets_by_chain.items():
+            if not addresses:
+                continue
+
+            logging.info(f"开始批量查询 {len(addresses)} 个钱包在 {chain} 链上的平均持有时间")
+            table_name = f"t_transaction_daily_{chain}"
+            
+            sql = f"""
+            WITH WalletTokenTimes AS (
+                SELECT
+                    wallet,
+                    token,
+                    MIN(CASE WHEN first_trade = 1 THEN unix_time END) AS t1,
+                    MAX(CASE WHEN op = 'sell' THEN unix_time END) AS t2
+                FROM
+                    {table_name}
+                WHERE
+                    wallet = ANY(%(wallets)s)
+                GROUP BY
+                    wallet, token
+            ),
+            ValidHoldingPeriods AS (
+                SELECT
+                    wallet,
+                    (t2 - t1) AS holding_time
+                FROM
+                    WalletTokenTimes
+                WHERE
+                    t1 IS NOT NULL
+                    AND t2 IS NOT NULL
+                    AND t2 > t1
+            )
+            SELECT
+                wallet,
+                COALESCE(AVG(holding_time), 0) AS average_holding_time_seconds
+            FROM
+                ValidHoldingPeriods
+            GROUP BY
+                wallet
+            """
+            
+            params = {'wallets': addresses}
+            
+            try:
+                results = self.pg_client.execute(sql, params)
+                for row in results:
+                    wallet_address, avg_time = row[0], float(row[1])
+                    if (wallet_address, chain) in wallet_holding_times:
+                        wallet_holding_times[(wallet_address, chain)] = avg_time
+                logging.info(f"链 {chain} 查询完成，获取到 {len(results)} 个钱包的持有时间")
+            except Exception as e:
+                logging.error(f"批量查询链 {chain} 的钱包持有时间失败: {e}")
+
+        return wallet_holding_times
+
     def get_avg_holding_time(self, wallet_list: List[str], chain: str) -> Dict[str, float]:
         """
         查询钱包的平均持有时间
@@ -173,45 +238,57 @@ class SMWRepository:
 
     def filter_bad_wallet_possess_garbage_tokens(self, wallet_list: List[WalletModel], garbage_tokens: List[TokenModel]) -> List[WalletModel]:
         logging.info(f"开始筛选垃圾钱包，总钱包数: {len(wallet_list)}, 垃圾代币数: {len(garbage_tokens)}")
-        
-        # 1. 按链对垃圾代币进行分组
-        chain_garbage_tokens_map: Dict[str, Dict[str, TokenModel]] = {}
-        for token in garbage_tokens:
-            if token.chain not in chain_garbage_tokens_map:
-                chain_garbage_tokens_map[token.chain] = {}
-            chain_garbage_tokens_map[token.chain][token.address] = token
 
-        # 2. 准备并发任务
-        tasks_args = []
-        token_repo = HotTokenRepository()
-        for wallet in wallet_list:
-            garbage_map = chain_garbage_tokens_map.get(wallet.chain, {})
-            tasks_args.append((wallet, garbage_map, token_repo))
-        
-        if not tasks_args:
-            logging.warning("没有需要处理的钱包任务")
+        if not wallet_list:
             return []
 
-        # 3. 使用线程池并发执行检查
-        bad_wallets: List[WalletModel] = []
-        with ThreadPoolManager(max_workers=40) as pool:
-            results = pool.execute_tasks_and_wait(
-                self._check_single_wallet_is_bad,
-                tasks_args,
-                show_log=True
-            )
+        # 1. 按链对垃圾代币进行分组
+        chain_garbage_tokens_map: Dict[str, Dict[str, TokenModel]] = defaultdict(dict)
+        for token in garbage_tokens:
+            chain_garbage_tokens_map[token.chain][token.address] = token
+
+        # 2. 批量获取所有钱包的交易记录
+        token_repo = HotTokenRepository()
+        all_traded_tokens = token_repo.get_wallets_2d_trade_tokens(wallet_list)
+
+        # 3. 识别垃圾钱包
+        bad_wallet_keys = set()
+
+        for wallet in wallet_list:
+            wallet_key = (wallet.address, wallet.chain)
+
+            traded_items = all_traded_tokens.get(wallet.address, [])
+            traded_pairs_on_chain = [(token, pair) for token, pair, chain in traded_items if chain == wallet.chain]
+
+            if not traded_pairs_on_chain:
+                bad_wallet_keys.add(wallet_key)
+                continue
+
+            garbage_map = chain_garbage_tokens_map.get(wallet.chain, {})
+            has_traded_garbage = False
+            new_token_count = 0
+
+            for token_address, _ in traded_pairs_on_chain:
+                if token_address in garbage_map:
+                    has_traded_garbage = True
+                    token_model = garbage_map[token_address]
+                    
+                    if token_model.is_honeypot or token_model.is_low_liquidity:
+                        bad_wallet_keys.add(wallet_key)
+                        break
+                    
+                    if not token_model.is_old:
+                        new_token_count += 1
             
-            for result in results:
-                if result:
-                    bad_wallets.append(result)
+            if wallet_key in bad_wallet_keys:
+                continue
 
-        logging.info(f"垃圾钱包筛选完成，共找到 {len(bad_wallets)} 个垃圾钱包")
-        
-        good_wallets = []
-        bad_wallet_addresses = {w.address for w in bad_wallets}
-        for w in wallet_list:
-            if w.address not in bad_wallet_addresses:
-                good_wallets.append(w)
+            if has_traded_garbage and new_token_count == 0:
+                bad_wallet_keys.add(wallet_key)
 
+        # 4. 过滤优质钱包
+        good_wallets = [w for w in wallet_list if (w.address, w.chain) not in bad_wallet_keys]
+
+        logging.info(f"垃圾钱包筛选完成，共找到 {len(bad_wallet_keys)} 个垃圾钱包")
         logging.info(f"过滤后剩余 {len(good_wallets)} 个优质钱包")
         return good_wallets

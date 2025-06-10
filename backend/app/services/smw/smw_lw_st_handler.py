@@ -41,8 +41,8 @@ class LowStatisticWalletHandler:
 
                 buy = market_data.get('buy_times_7d', 0) or 0
                 sell = market_data.get('sell_times_7d', 0) or 0
-                if (buy + sell) <= 25:
-                    return False
+                # if (buy + sell) <= 25:
+                #     return False
 
                 if (buy + sell) >= 300:
                     return False
@@ -281,8 +281,6 @@ class LowStatisticWalletHandler:
                 total_records=total_wallets,
                 processed_so_far=processed_so_far
             )
-
-            MongoDBClient().insert_many(collection_name='phase1-bak', documents=list(valid_wallet_stats.values()), db_name='test')
 
             # 对满足条件的钱包进行额外过滤：balance > 0 且 7D_token_num >= 5
             def check_wallet_validity(wallet_address: str) -> Optional[str]:

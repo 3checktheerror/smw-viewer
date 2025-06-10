@@ -6,6 +6,7 @@ import time
 from typing import Dict, List, Optional, Tuple
 from decimal import Decimal, InvalidOperation
 from pymongo.errors import DuplicateKeyError
+from collections import defaultdict
 
 from backend.app.domain.models.wallet import WalletModel
 from backend.app.utils import RedisSentinelClient, MongoDBClient
@@ -14,6 +15,7 @@ from backend.app.utils.thread_pool import ThreadPoolManager
 from backend.app.core.config import settings
 from backend.app.utils.time_utils import TimeUtils
 from backend.app.services.smw.utils.debot_utils import DebotAPIUtils
+from backend.app.services.smw.utils.wallet_utils import WalletUtils
 
 
 class HotTokenRepository:
@@ -319,95 +321,70 @@ class HotTokenRepository:
 
 
 
-    def get_wallet_2d_trade_tokens(self, wallet: str, chain: str) -> List[Tuple[str, str]]:
+    def get_wallet_2d_trade_tokens(self, wallet_address: str, chain: str) -> List[Tuple[str, str]]:
+        return self.get_wallet_group_2d_trade_tokens([wallet_address], chain)
+
+    def get_wallet_group_2d_trade_tokens(self, wallet_addresses: List[str], chain: str) -> List[Tuple[str, str]]:
         """
-        获取钱包在指定链上的买入操作涉及的所有token和pair（去重）
-        
-        Args:
-            wallet: 钱包地址
-            chain: 链名称
-            
-        Returns:
-            List[Tuple[str, str]]: token和pair的元组列表 [(token, pair), ...]
+        获取一组钱包在指定链上2天内交易过的代币（去重）
         """
+        if not wallet_addresses:
+            return []
+
+        two_days_ago_timestamp = TimeUtils.get_utc_0_hour_ts() - 86400 * 2
+
+        table_name = f"t_transaction_daily_{chain}"
+
+        sql = f"""
+        SELECT DISTINCT token, pair
+        FROM {table_name}
+        WHERE wallet = ANY(%(wallets)s) AND unix_time >= %(timestamp)s AND op = 'buy'
+        """
+
+        params = {
+            'wallets': wallet_addresses,
+            'timestamp': two_days_ago_timestamp
+        }
+
         try:
+            results = self.pg_client.execute(sql, params)
+            return [(row[0], row[1]) for row in results]
+        except Exception as e:
+            logging.error(f"Error fetching 2d trade tokens for chain {chain}: {e}")
+            return []
+
+    def get_wallets_2d_trade_tokens(self, wallets: List[WalletModel]) -> Dict[str, List[Tuple[str, str, str]]]:
+        """
+        批量获取多个钱包（可能跨链）在2天内交易过的代币
+        """
+        if not wallets:
+            return {}
+
+        wallets_by_chain, _ = WalletUtils.group_wallet_by_chain(wallets)
+
+        all_results = defaultdict(list)
+        two_days_ago_timestamp = TimeUtils.get_utc_0_hour_ts() - 86400 * 2
+
+        for chain, addresses in wallets_by_chain.items():
+            if not addresses:
+                continue
+
             table_name = f"t_transaction_daily_{chain}"
-            
-            query = f"""
-                SELECT DISTINCT token, pair 
-                FROM {table_name} 
-                WHERE wallet = %(wallet)s AND op = 'buy'
+            sql = f"""
+            SELECT wallet, token, pair
+            FROM {table_name}
+            WHERE wallet = ANY(%(wallets)s) AND unix_time >= %(timestamp)s AND op = 'buy'
             """
-            
-            result = self.pg_client.execute(query, params={'wallet': wallet})
-            return [(row[0], row[1]) for row in result if row[0] and row[1]]
-            
-        except Exception as e:
-            logging.error(f"Error querying trade tokens for wallet {wallet} on {chain}: {e}")
-            return []
+            params = {'wallets': addresses, 'timestamp': two_days_ago_timestamp}
 
+            try:
+                results = self.pg_client.execute(sql, params)
+                for wallet, token, pair in results:
+                    all_results[wallet].append((token, pair, chain))
+            except Exception as e:
+                logging.error(f"Error fetching batch 2d trade tokens for chain {chain}: {e}")
 
-    def get_wallet_group_2d_trade_tokens(self, wallet_list: List[str], chain: str) -> List[Tuple[str, str]]:
-        """
-        批量获取钱包组在指定链上的买入操作涉及的所有token和pair（按token去重）
-        
-        Args:
-            wallet_list: 钱包地址列表
-            chain: 链名称
-            
-        Returns:
-            List[Tuple[str, str]]: 去重后的token和pair元组列表
-        """
-        if not wallet_list:
-            return []
-            
-        try:
-            def get_wallet_tokens(wallet: str) -> Tuple[str, List[Tuple[str, str]]]:
-                """获取单个钱包的token-pair信息"""
-                try:
-                    tokens_pairs = self.get_wallet_2d_trade_tokens(wallet, chain)
-                    return wallet, tokens_pairs
-                except Exception as e:
-                    logging.error(f"Error getting tokens for wallet {wallet}: {e}")
-                    return wallet, []
-            
-            total_wallets = len(wallet_list)
-            logging.info(f"Starting to get trade tokens for {total_wallets} wallets on chain {chain}")
-            
-            # 使用20个线程并发查询
-            with ThreadPoolManager(max_workers=40) as pool:
-                tasks_args = [(wallet,) for wallet in wallet_list]
-                results = pool.execute_tasks_and_wait(get_wallet_tokens, tasks_args)
-                
-                # 收集所有token-pair，按token去重
-                token_pair_dict = {}  # {token: pair}
-                completed = 0
-                
-                for result in results:
-                    try:
-                        if result is not None:
-                            wallet, tokens_pairs = result
-                            for token, pair in tokens_pairs:
-                                if token not in token_pair_dict:
-                                    token_pair_dict[token] = pair
-                        
-                        completed += 1
-                        if completed % 100 == 0 or completed == total_wallets:
-                            progress = (completed / total_wallets) * 100
-                            logging.info(f"Progress: {completed}/{total_wallets} ({progress:.1f}%) wallets processed for trade tokens")
-                            
-                    except Exception as e:
-                        logging.error(f"Error processing wallet trade tokens result: {e}")
-                        completed += 1
-            
-            result = list(token_pair_dict.items())
-            logging.info(f"Completed getting trade tokens for {total_wallets} wallets. Found {len(result)} unique tokens")
-            return result
-            
-        except Exception as e:
-            logging.error(f"Error in _get_wallet_group_2d_trade_tokens: {e}")
-            return []
-
+        return all_results
 
     def close_connections(self):
         try:

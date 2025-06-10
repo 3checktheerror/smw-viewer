@@ -42,7 +42,7 @@ class TokenUtils:
             logging.info(f"低流动性token数量：{len(low_liquidity_tokens)}")
 
             honeypot_tokens = set()
-            if chain is not 'solana':
+            if chain != 'solana':
                 # 貔貅
                 tokens_for_honeypot_check = [token for token in token_addresses if token not in low_liquidity_tokens]
                 honeypot_tokens = set(DebotAPIUtils.get_honeypot_tokens(tokens_for_honeypot_check, chain))
@@ -58,7 +58,7 @@ class TokenUtils:
             if total_tokens_in_chain > 0:
                 old_pct = (len(old_tokens) / total_tokens_in_chain) * 100
                 low_liquidity_pct = (len(low_liquidity_tokens) / total_tokens_in_chain) * 100
-                if chain is not 'solana':
+                if chain != 'solana':
                     honeypot_pct = (len(honeypot_tokens) / total_tokens_in_chain) * 100
                     logging.info(f"链 {chain} 统计: "
                                  f"低流动性: {len(low_liquidity_tokens)} ({low_liquidity_pct:.2f}%), "

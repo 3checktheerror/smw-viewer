@@ -34,36 +34,14 @@ class TransactionHandler:
         
         logging.info(f"开始处理 {len(wallet_list)} 个钱包的持有时间统计")
         
-        # 按chain分组钱包
-        chain_wallet_groups: Dict[str, List[WalletModel]] = defaultdict(list)
-        for wallet in wallet_list:
-            chain_wallet_groups[wallet.chain].append(wallet)
-
-        # 存储所有钱包的持有时间统计
-        all_holding_times = {}
+        all_holding_times = self.smw_repository.get_avg_holding_time_batch(wallet_list)
         
-        # 为每个chain分别查询持有时间
-        for chain, wallets in chain_wallet_groups.items():
-            logging.info(f"开始处理 {chain} 链上的 {len(wallets)} 个钱包")
-            
-            wallet_addresses = [wallet.address for wallet in wallets]
-            holding_times = self.smw_repository.get_avg_holding_time(wallet_addresses, chain)
-            
-            # 合并到总的持有时间字典中
-            for wallet in wallets:
-                holding_time = holding_times.get(wallet.address, 0.0)
-                all_holding_times[wallet.address] = holding_time
-                logging.debug(f"钱包 {wallet.address} 在 {chain} 链上的平均持有时间: {holding_time:.2f} 秒")
-        
-        # 过滤持仓时间大于500秒的钱包
+        # 过滤持仓时间大于120秒的钱包
         filtered_wallets = []
         for wallet in wallet_list:
-            holding_time = all_holding_times.get(wallet.address, 0.0)
-            if holding_time > 500:
+            holding_time = all_holding_times.get((wallet.address, wallet.chain), 0.0)
+            if holding_time > 120:
                 filtered_wallets.append(wallet)
-                logging.debug(f"钱包 {wallet.address} 符合条件，持有时间: {holding_time:.2f} 秒")
-            else:
-                logging.debug(f"钱包 {wallet.address} 被过滤，持有时间: {holding_time:.2f} 秒 <= 500秒")
         
         logging.info(f"持有时间统计处理完成，共处理 {len(wallet_list)} 个钱包，过滤后剩余 {len(filtered_wallets)} 个钱包")
         return filtered_wallets
@@ -113,5 +91,5 @@ class TransactionHandler:
 
         # 第二步：过滤持有低流动性代币的钱包 + 过滤买入貔貅币钱包 + 过滤2天内没有买入新币钱包
         logging.info("开始根据垃圾代币进行钱包过滤...")
-        res = SMWRepository().filter_bad_wallet_possess_garbage_tokens(stats_filtered, garbage_tokens)
+        res = handler.smw_repository.filter_bad_wallet_possess_garbage_tokens(stats_filtered, garbage_tokens)
         return res
