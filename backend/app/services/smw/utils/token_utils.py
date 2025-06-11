@@ -13,7 +13,7 @@ from backend.app.utils.time_utils import TimeUtils
 
 class TokenUtils:
 
-    # 低流动性 + 新老币 + 貔貅
+    # 新老币 + 貔貅
     @staticmethod
     def get_wallet_group_bad_tokens(wallet_list: List[WalletModel]) -> List[TokenModel]:
 
@@ -37,16 +37,12 @@ class TokenUtils:
 
             token_addresses = [item[0] for item in trade_tokens_with_pair]
 
-            # 低流动性
-            low_liquidity_tokens = set(DebotAPIUtils.get_low_liquidity_tokens(trade_tokens_with_pair, chain))
-            logging.info(f"低流动性token数量：{len(low_liquidity_tokens)}")
-
             honeypot_tokens = set()
             if chain != 'solana':
                 # 貔貅
-                tokens_for_honeypot_check = [token for token in token_addresses if token not in low_liquidity_tokens]
+                tokens_for_honeypot_check = [token for token in token_addresses]
                 honeypot_tokens = set(DebotAPIUtils.get_honeypot_tokens(tokens_for_honeypot_check, chain))
-                logging.info(f"貔貅token数量：{len(honeypot_tokens)}")
+                logging.info(f"{chain}貔貅token数量：{len(honeypot_tokens)}")
 
             # 老币
             old_token_results = DebotAPIUtils.get_token_age(chain, token_addresses)
@@ -57,16 +53,13 @@ class TokenUtils:
             total_tokens_in_chain = len(token_addresses)
             if total_tokens_in_chain > 0:
                 old_pct = (len(old_tokens) / total_tokens_in_chain) * 100
-                low_liquidity_pct = (len(low_liquidity_tokens) / total_tokens_in_chain) * 100
                 if chain != 'solana':
                     honeypot_pct = (len(honeypot_tokens) / total_tokens_in_chain) * 100
                     logging.info(f"链 {chain} 统计: "
-                                 f"低流动性: {len(low_liquidity_tokens)} ({low_liquidity_pct:.2f}%), "
                                  f"貔貅: {len(honeypot_tokens)} ({honeypot_pct:.2f}%), "
                                  f"老币: {len(old_tokens)} ({old_pct:.2f}%)")
                 else:
                     logging.info(f"链 {chain} 统计: "
-                                 f"低流动性: {len(low_liquidity_tokens)} ({low_liquidity_pct:.2f}%), "
                                  f"老币: {len(old_tokens)} ({old_pct:.2f}%)")
 
             processed_tokens = set()
@@ -75,16 +68,14 @@ class TokenUtils:
                 if token_address in processed_tokens:
                     continue
                 
-                is_low_liquidity = token_address in low_liquidity_tokens
                 is_honeypot = token_address in honeypot_tokens
                 is_old = token_address in old_tokens
 
-                if is_low_liquidity or is_honeypot or is_old:
+                if is_honeypot or is_old:
                     token = TokenModel(
                         chain=chain,
                         address=token_address,
                         is_honeypot=is_honeypot,
-                        is_low_liquidity=is_low_liquidity,
                         is_old=is_old                    )
                     all_bad_tokens.append(token)
                 

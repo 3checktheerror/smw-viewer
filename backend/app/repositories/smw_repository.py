@@ -242,6 +242,11 @@ class SMWRepository:
         if not wallet_list:
             return []
 
+        # 0. 按链对钱包进行分组，以记录初始数量
+        initial_wallets_by_chain = defaultdict(list)
+        for wallet in wallet_list:
+            initial_wallets_by_chain[wallet.chain].append(wallet)
+
         # 1. 按链对垃圾代币进行分组
         chain_garbage_tokens_map: Dict[str, Dict[str, TokenModel]] = defaultdict(dict)
         for token in garbage_tokens:
@@ -273,7 +278,7 @@ class SMWRepository:
                     has_traded_garbage = True
                     token_model = garbage_map[token_address]
                     
-                    if token_model.is_honeypot or token_model.is_low_liquidity:
+                    if token_model.is_honeypot:
                         bad_wallet_keys.add(wallet_key)
                         break
                     
@@ -289,6 +294,18 @@ class SMWRepository:
         # 4. 过滤优质钱包
         good_wallets = [w for w in wallet_list if (w.address, w.chain) not in bad_wallet_keys]
 
-        logging.info(f"垃圾钱包筛选完成，共找到 {len(bad_wallet_keys)} 个垃圾钱包")
-        logging.info(f"过滤后剩余 {len(good_wallets)} 个优质钱包")
+        # 5. 打印每个链的过滤总结
+        final_wallets_by_chain = defaultdict(list)
+        for wallet in good_wallets:
+            final_wallets_by_chain[wallet.chain].append(wallet)
+
+        summary_logs = []
+        all_chains = set(initial_wallets_by_chain.keys()) | set(final_wallets_by_chain.keys())
+
+        for chain in sorted(list(all_chains)):
+            initial_count = len(initial_wallets_by_chain[chain])
+            final_count = len(final_wallets_by_chain[chain])
+            summary_logs.append(f"链 {chain}: 初始 {initial_count} -> 过滤后 {final_count}")
+        
+        logging.info("过滤行为筛选总结:\n" + "\n".join(summary_logs))
         return good_wallets

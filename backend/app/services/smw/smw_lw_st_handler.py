@@ -16,38 +16,62 @@ class LowStatisticWalletHandler:
         self.ck_client = ClickHouseClient()
 
     @staticmethod
-    def meets_criteria(market_data: dict, chain: str, is_second_check: bool = True) -> bool:
+    def meets_criteria(market_data: dict, chain: str, is_second_check: bool = True, is_daily_fetch = True) -> bool:
         try:
-            if is_second_check:
-                token_winrate = float(market_data.get('token_winrate_7d', 0.0) or 0.0)
-                return token_winrate > 0.3
+            if not is_daily_fetch:
+                if is_second_check:
+                    token_winrate = float(market_data.get('token_winrate_7d', 0.0) or 0.0)
+                    return token_winrate > 0.32
+                else:
+                    pnl_7d = float(market_data.get('pnl_7d', 0.0) or 0.0)
+                    if pnl_7d <= 0.5:
+                        return False
+
+                    avg_cost = float(market_data.get('avg_buy_volume_7d', 0.0) or 0.0)
+                    if avg_cost < 300:
+                        return False
+
+                    winrate = float(market_data.get('winrate_7d', 0.0) or 0.0)
+                    if winrate <= (0.3 if chain in ['bsc', 'solana'] else 0.5):
+                        return False
+
+                    buy = market_data.get('buy_times_7d', 0) or 0
+                    sell = market_data.get('sell_times_7d', 0) or 0
+
+                    if (buy + sell) <= 10:
+                        return False
+
+                    if (buy + sell) >= 300:
+                        return False
+
+                    return True
             else:
+                if is_second_check:
+                    token_winrate = float(market_data.get('token_winrate_7d', 0.0) or 0.0)
+                    return token_winrate > 0.32
+                else:
+                    pnl_30d = float(market_data.get('pnl_30d', 0.0) or 0.0)
+                    if pnl_30d <= 0.4:
+                        return False
 
-                pnl = float(market_data.get('pnl_7d', 0.0) or 0.0)
-                if pnl <= 0.4:
-                    return False
+                    avg_cost = float(market_data.get('avg_buy_volume_30d', 0.0) or 0.0)
+                    if avg_cost < 300:
+                        return False
 
-                avg_cost = float(market_data.get('avg_buy_volume_7d', 0.0) or 0.0)
-                if avg_cost <= 300:
-                    return False
+                    winrate = float(market_data.get('winrate_30d', 0.0) or 0.0)
+                    if winrate <= (0.3 if chain in ['bsc', 'solana'] else 0.5):
+                        return False
 
-                winrate = float(market_data.get('winrate_7d', 0.0) or 0.0)
-                if winrate <= (0.3 if chain in ['bsc', 'solana'] else 0.4):
-                    return False
+                    buy = market_data.get('buy_times_7d', 0) or 0
+                    sell = market_data.get('sell_times_7d', 0) or 0
 
-                realize_profit = float(market_data.get('realized_profit_7d', 0.0) or 0.0)
-                if realize_profit <= 300:
-                    return False
+                    if (buy + sell) <= 10:
+                        return False
 
-                buy = market_data.get('buy_times_7d', 0) or 0
-                sell = market_data.get('sell_times_7d', 0) or 0
-                # if (buy + sell) <= 25:
-                #     return False
+                    if (buy + sell) >= 300:
+                        return False
 
-                if (buy + sell) >= 300:
-                    return False
-
-                return True
+                    return True
 
         except (TypeError, ValueError) as e:
             logging.warning(f"数据类型转换失败: {str(e)}")
@@ -188,7 +212,7 @@ class LowStatisticWalletHandler:
             logging.error(f"get_wallet_30d_pnl: {str(e)}")
             return {}
 
-    def get_wallet_stats(self, chain: str, wallets: list, total_records: int, processed_so_far: int=0) -> dict:
+    def get_wallet_stats(self, chain: str, wallets: list, total_records: int, processed_so_far: int=0, is_daily_fetch = True) -> dict:
         result_dict = {}
         total_wallets = len(wallets)
         max_workers = 1
@@ -203,7 +227,7 @@ class LowStatisticWalletHandler:
                 pnl_data = self.get_wallet_pnl(chain, batch_wallets)
                 valid_wallets = pd.Series([
                     w for w in batch_wallets
-                    if pnl_data.get(w) and LowStatisticWalletHandler.meets_criteria(pnl_data[w], chain, False)
+                    if pnl_data.get(w) and LowStatisticWalletHandler.meets_criteria(pnl_data[w], chain, False, is_daily_fetch)
                 ])
 
                 if valid_wallets.empty:
@@ -212,7 +236,7 @@ class LowStatisticWalletHandler:
                 token_winrates = self.get_wallet_token_win_rate(chain, valid_wallets.tolist())
                 df = pd.DataFrame.from_dict(pnl_data, orient='index')
                 df['token_winrate_7d'] = df.index.map(token_winrates)
-                valid_data = df[df.apply(lambda x: LowStatisticWalletHandler.meets_criteria(x.to_dict(), chain, True), axis=1)]
+                valid_data = df[df.apply(lambda x: LowStatisticWalletHandler.meets_criteria(x.to_dict(), chain, True, is_daily_fetch), axis=1)]
                 return valid_data.to_dict('index')
             except Exception as e:
                 logging.error(f"处理批次失败: {str(e)}", exc_info=True)
@@ -239,7 +263,7 @@ class LowStatisticWalletHandler:
         return result_dict
 
     @staticmethod
-    def filter(wallet_list: List[WalletModel]) -> List[WalletModel]:
+    def filter(wallet_list: List[WalletModel], is_daily_fetch: bool = True) -> List[WalletModel]:
         if not wallet_list:
             logging.warning("钱包列表为空")
             return []
@@ -279,7 +303,8 @@ class LowStatisticWalletHandler:
                 chain=chain,
                 wallets=chain_wallets,
                 total_records=total_wallets,
-                processed_so_far=processed_so_far
+                processed_so_far=processed_so_far,
+                is_daily_fetch=is_daily_fetch,
             )
 
             # 对满足条件的钱包进行额外过滤：balance > 0 且 7D_token_num >= 5

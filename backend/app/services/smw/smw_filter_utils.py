@@ -8,8 +8,8 @@ from backend.app.services.smw.smw_lw_st_handler import LowStatisticWalletHandler
 class SMWFilterUtils:
 
     @staticmethod
-    def filter_low_statistic_wallet(wallet_list: List[WalletModel]) -> List[WalletModel]:
-        res = LowStatisticWalletHandler.filter(wallet_list)
+    def filter_low_statistic_wallet(wallet_list: List[WalletModel], is_daily_fetch: bool = True) -> List[WalletModel]:
+        res = LowStatisticWalletHandler.filter(wallet_list, is_daily_fetch=is_daily_fetch)
         return res
 
     @staticmethod
@@ -18,8 +18,8 @@ class SMWFilterUtils:
         return res
 
     @staticmethod
-    def start_filter(wallet_list: List[WalletModel]) -> Tuple[List[WalletModel], List[WalletModel], List[WalletModel]]:
-        res1 = SMWFilterUtils.filter_low_statistic_wallet(wallet_list)
+    def start_filter(wallet_list: List[WalletModel], is_daily_fetch: bool = True) -> Tuple[List[WalletModel], List[WalletModel], List[WalletModel]]:
+        res1 = SMWFilterUtils.filter_low_statistic_wallet(wallet_list, is_daily_fetch=is_daily_fetch)
         res1_keys = {(wallet.chain, wallet.address) for wallet in res1}
         eliminated_by_low_statistic = [wallet for wallet in wallet_list if (wallet.chain, wallet.address) not in res1_keys]
 

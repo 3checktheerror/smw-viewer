@@ -31,6 +31,18 @@ class TimeUtils:
         now_utc = datetime.now(timezone.utc)
         formatted_date_utc = now_utc.strftime('%Y-%m-%d')
         return formatted_date_utc
+
+    @staticmethod
+    def get_3_days_ago_date() -> str:
+        three_days_ago_utc = datetime.now(timezone.utc) - timedelta(days=3)
+        formatted_date_utc = three_days_ago_utc.strftime('%Y-%m-%d')
+        return formatted_date_utc
+
+    @staticmethod
+    def get_7_days_ago_date() -> str:
+        seven_days_ago_utc = datetime.now(timezone.utc) - timedelta(days=7)
+        formatted_date_utc = seven_days_ago_utc.strftime('%Y-%m-%d')
+        return formatted_date_utc
     
     @staticmethod
     def get_prev_bg_date() -> str:

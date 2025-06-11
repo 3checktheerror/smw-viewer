@@ -3,8 +3,11 @@ from typing import Dict, Any, List, Tuple, Optional
 import logging
 from datetime import datetime, timezone, timedelta
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from httpx import HTTPStatusError
 from backend.app.utils.http_utils import DebotHTTPUtils
+from backend.app.utils.mongo_client import MongoDBClient
 from backend.app.utils.thread_pool import ThreadPoolManager
+from backend.app.utils.time_utils import TimeUtils
 
 
 class DebotAPIUtils:
@@ -80,7 +83,7 @@ class DebotAPIUtils:
                     holders = data.get("holders", 0)
                     
                     # 返回是否为低流动性代币（流动性 < 10000）
-                    is_low_liquidity = float(liquidity) < 10000 or int(holders) <= 300
+                    is_low_liquidity = float(liquidity) < 10000
                     return token, is_low_liquidity
                     
                 except Exception as e:
@@ -136,7 +139,29 @@ class DebotAPIUtils:
         if not tokens:
             return []
 
-        def is_honeypot_token(token: str, chain: str) -> Tuple[str, bool]:
+        # Caching logic starts here
+        mongodb_client = MongoDBClient()
+        today_str = TimeUtils.get_cur_date()
+        cached_tokens_cursor = mongodb_client.find_many(
+            collection_name='honeypot',
+            db_name='token',
+            filter_dict={'stored_date': today_str, 'chain': chain}
+        )
+
+        cached_honeypot_status = {doc['address']: doc['is_honeypot'] for doc in cached_tokens_cursor}
+        
+        honeypot_tokens = [token for token, is_honeypot in cached_honeypot_status.items() if is_honeypot]
+        
+        tokens_to_check = [token for token in tokens if token not in cached_honeypot_status]
+
+        if not tokens_to_check:
+            logging.info(f"All {len(tokens)} tokens for chain {chain} found in cache.")
+            return honeypot_tokens
+        else:
+            logging.info(f"Found {len(cached_honeypot_status)} cached tokens for chain {chain}. Checking {len(tokens_to_check)} new tokens.")
+
+
+        def is_honeypot_token(token: str, chain: str) -> Optional[Tuple[str, bool]]:
             """判断代币是否为貔貅币"""
             try:
                 # 调用第一个接口：token_analyzer
@@ -194,22 +219,38 @@ class DebotAPIUtils:
 
                 return token, final_result == 1
 
+            except HTTPStatusError as e:
+                logging.warning(f"HTTP error for {token} on {chain} after retries: {e}")
+                return None # Indicate failure to prevent DB insertion.
             except Exception as e:
                 logging.error(f"Error in honeypot detection for {token} on {chain}: {e}")
                 # 发生错误时，为了安全起见，返回 True（认为是貔貅币）
                 return token, True
 
-        honeypot_tokens = []
-        with ThreadPoolManager(max_workers=30) as pool:
-            tasks_args = [(token, chain) for token in tokens]
+        newly_checked_tokens_to_store = []
+        with ThreadPoolManager(max_workers=100) as pool:
+            tasks_args = [(token, chain) for token in tokens_to_check]
             results = pool.execute_tasks_and_wait(is_honeypot_token, tasks_args)
 
             for result in results:
                 if result:
-                    token, is_honeypot = result
-                    if is_honeypot:
+                    token, is_honeypot_status = result
+                    if is_honeypot_status:
                         honeypot_tokens.append(token)
+                    newly_checked_tokens_to_store.append({
+                        "chain": chain,
+                        "address": token,
+                        "is_honeypot": is_honeypot_status,
+                        "stored_date": today_str
+                    })
         
+        if newly_checked_tokens_to_store:
+            mongodb_client.insert_many(
+                collection_name='honeypot',
+                documents=newly_checked_tokens_to_store,
+                db_name='token'
+            )
+
         return honeypot_tokens
 
 
