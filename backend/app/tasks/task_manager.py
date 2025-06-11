@@ -81,6 +81,7 @@ class TaskManager:
 
 
 async def main():
+    setup_logging()
     logging.info("Starting TaskManager main function...")
     task_manager_instance = TaskManager()
     task_manager_instance.start_scheduler()
@@ -97,5 +98,4 @@ async def main():
 
 
 if __name__ == "__main__":
-    setup_logging()
     asyncio.run(main())
