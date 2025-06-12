@@ -315,7 +315,7 @@ class LowStatisticWalletHandler:
                 try:
                     # 检查钱包余额
                     balance = AlchemyUtils.get_wallet_balance(wallet_address, chain)
-                    balance_threshold = 100 if chain == 'base' else 0
+                    balance_threshold = 0.1 if chain == 'base' else 0
                     if balance is None or balance <= balance_threshold:
                         logging.debug(
                             f"钱包 {wallet_address} (chain: {chain}) 余额({balance}) "
