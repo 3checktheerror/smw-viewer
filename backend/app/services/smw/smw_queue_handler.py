@@ -72,19 +72,19 @@ class SMWQueueHandlerTask:
             return
 
         seven_days_ago = TimeUtils.get_7_days_ago_date()
-        report_file_pattern = re.compile(r"queue_change_report_(\d{4}-\d{2}-\d{2})\.csv")
+        file_pattern = re.compile(r"(?:queue_change_report_|daily_avg_buy_)(\d{4}-\d{2}-\d{2})\.csv")
 
         for filename in os.listdir(report_dir):
-            match = report_file_pattern.match(filename)
+            match = file_pattern.match(filename)
             if match:
                 date_str = match.group(1)
                 if date_str < seven_days_ago:
+                    file_path = os.path.join(report_dir, filename)
                     try:
-                        file_path = os.path.join(report_dir, filename)
                         os.remove(file_path)
                         logging.info(f"Deleted old report file: {file_path}")
                     except OSError as e:
-                        logging.error(f"Error deleting report file {file_path}: {e}")
+                        logging.error(f"Error deleting file {file_path}: {e}")
 
 
     @staticmethod
