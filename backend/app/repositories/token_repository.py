@@ -41,6 +41,7 @@ class HotTokenRepository:
     
     def get_previous_day_tokens(self) -> Dict[str, List[str]]:
         prev_date = TimeUtils.get_prev_date()
+        cur_bg_date = TimeUtils.get_cur_bg_date()
         
         onchain_tokens = self.mongodb_client.find_many(
             settings.daily_onchain_token_collection,
@@ -53,23 +54,61 @@ class HotTokenRepository:
             {"date": prev_date},
             db_name=settings.mongodb_token_db,
         )
+
+        # 从graph数据库读取三个dune集合的数据
+        dune_5047660_tokens = self.mongodb_client.find_many(
+            "dune_5047660",
+            {"store_time": cur_bg_date, 'rank': {'$lte': 10}},
+            db_name="graph",
+        )
         
-        chain_tokens = {}
+        dune_5036706_tokens = self.mongodb_client.find_many(
+            "dune_5036706", 
+            {"store_time": cur_bg_date, 'rank': {'$lte': 10}},
+            db_name="graph",
+        )
         
+        dune_4796036_tokens = self.mongodb_client.find_many(
+            "dune_4796036",
+            {"store_time": cur_bg_date, 'rank': {'$lte': 10}},
+            db_name="graph",
+        )
+
+        chain_tokens = defaultdict(set)
+
+        # 处理原有的onchain_tokens数据
         for token_doc in onchain_tokens:
             chain = token_doc.get("chain")
             token = token_doc.get("token")
             if chain and token:
-                if chain not in chain_tokens:
-                    chain_tokens[chain] = set()
                 chain_tokens[chain].add(token)
-        
+
+        # 处理原有的rank_tokens数据
         for token_doc in rank_tokens:
             chain = token_doc.get("chain")
             token = token_doc.get("token")
             if chain and token:
-                if chain not in chain_tokens:
-                    chain_tokens[chain] = set()
+                chain_tokens[chain].add(token)
+        
+        # 处理dune_5047660集合数据
+        for token_doc in dune_5047660_tokens:
+            chain = token_doc.get("chain")
+            token = token_doc.get("token")
+            if chain and token:
+                chain_tokens[chain].add(token)
+                
+        # 处理dune_5036706集合数据
+        for token_doc in dune_5036706_tokens:
+            chain = token_doc.get("chain")
+            token = token_doc.get("token")
+            if chain and token:
+                chain_tokens[chain].add(token)
+                
+        # 处理dune_4796036集合数据
+        for token_doc in dune_4796036_tokens:
+            chain = token_doc.get("chain")
+            token = token_doc.get("token")
+            if chain and token:
                 chain_tokens[chain].add(token)
         
         return {chain: list(tokens) for chain, tokens in chain_tokens.items()}

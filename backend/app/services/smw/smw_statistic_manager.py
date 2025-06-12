@@ -6,6 +6,7 @@ from typing import Dict, List
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import pandas as pd
 from backend.app.services.smw.utils.debot_utils import DebotAPIUtils
+from backend.app.services.smw.smw_lw_st_handler import LowStatisticWalletHandler
 from backend.app.utils.time_utils import TimeUtils
 
 
@@ -13,17 +14,57 @@ class SMWStatisticManager:
 
     @staticmethod
     def get_smw_avg_buy_statistics(wallet_data_list: List[Dict]):
-        logging.info("开始修正稳定币交易数据...")
+        logging.info("开始数据预处理，补充缺失字段...")
+        
+        # 按链分组钱包数据
+        wallets_by_chain = defaultdict(list)
+        for wallet_data in wallet_data_list:
+            if 'chain' in wallet_data:
+                wallets_by_chain[wallet_data['chain']].append(wallet_data)
+        
+        # 为每个链补充缺失数据
+        handler = LowStatisticWalletHandler()
+        for chain, wallet_list in wallets_by_chain.items():
+            logging.info(f"正在为链 {chain} 的 {len(wallet_list)} 个钱包补充数据...")
+            
+            # 获取所有钱包地址
+            wallet_addresses = [w['address'] for w in wallet_list]
+            
+            # 批量获取 avg_buy_volume_7d 数据
+            pnl_data = handler.get_wallet_pnl(chain, wallet_addresses)
+            
+            # 并行获取 7D_token_address 数据
+            def get_token_data(wallet_data: Dict) -> Dict:
+                wallet_address = wallet_data['address']
+                try:
+                    token_data = DebotAPIUtils.get_wallet_7d_token(wallet_address, chain)
+                    wallet_data['7D_token_address'] = token_data.get('7D_token_address', [])
+                    
+                    # 从 pnl_data 中获取 avg_buy_volume_7d
+                    if wallet_address in pnl_data:
+                        wallet_data['avg_buy_volume_7d'] = pnl_data[wallet_address].get('avg_buy_volume_7d', 0.0)
+                    else:
+                        wallet_data['avg_buy_volume_7d'] = 0.0
+                        
+                    return wallet_data
+                except Exception as e:
+                    logging.error(f"获取钱包 {wallet_address} 数据失败: {str(e)}")
+                    wallet_data['7D_token_address'] = []
+                    wallet_data['avg_buy_volume_7d'] = 0.0
+                    return wallet_data
+            
+            # 使用线程池并行处理
+            with ThreadPoolExecutor(max_workers=50) as executor:
+                futures = [executor.submit(get_token_data, wallet_data) for wallet_data in wallet_list]
+                for f in as_completed(futures):
+                    f.result()  # 确保所有任务完成
+        
+        logging.info("数据预处理完成，开始修正稳定币交易数据...")
         updated_count = 0
         error_count = 0
         updated_addresses = []
         error_addresses = []
         address_lock = threading.Lock()
-
-        wallets_by_chain = defaultdict(list)
-        for wallet_data in wallet_data_list:
-            if 'chain' in wallet_data:
-                wallets_by_chain[wallet_data['chain']].append(wallet_data)
 
         filtered_data = []
 

@@ -21,10 +21,12 @@ class LowStatisticWalletHandler:
             if not is_daily_fetch:
                 if is_second_check:
                     token_winrate = float(market_data.get('token_winrate_7d', 0.0) or 0.0)
-                    return token_winrate > 0.32
+                    if token_winrate <= (0.25 if chain in ['bsc', 'solana'] else 0.33):
+                        return False
+                    return True
                 else:
                     pnl_7d = float(market_data.get('pnl_7d', 0.0) or 0.0)
-                    if pnl_7d <= 0.5:
+                    if pnl_7d <= (0.35 if chain in ['bsc', 'solana'] else 0.5):
                         return False
 
                     avg_cost = float(market_data.get('avg_buy_volume_7d', 0.0) or 0.0)
@@ -313,8 +315,12 @@ class LowStatisticWalletHandler:
                 try:
                     # 检查钱包余额
                     balance = AlchemyUtils.get_wallet_balance(wallet_address, chain)
-                    if balance is None or balance <= 0:
-                        logging.debug(f"钱包 {wallet_address} 余额不足，跳过")
+                    balance_threshold = 100 if chain == 'base' else 0
+                    if balance is None or balance <= balance_threshold:
+                        logging.debug(
+                            f"钱包 {wallet_address} (chain: {chain}) 余额({balance}) "
+                            f"不满足阈值(>{balance_threshold})，跳过"
+                        )
                         return None
                     
                     # 检查7天内代币数量

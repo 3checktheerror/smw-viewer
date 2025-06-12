@@ -142,10 +142,11 @@ class DebotAPIUtils:
         # Caching logic starts here
         mongodb_client = MongoDBClient()
         today_str = TimeUtils.get_cur_date()
+        three_days_ago = TimeUtils.get_3_days_ago_date()
         cached_tokens_cursor = mongodb_client.find_many(
             collection_name='honeypot',
             db_name='token',
-            filter_dict={'stored_date': today_str, 'chain': chain}
+            filter_dict={'stored_date': {'$gte': three_days_ago}, 'chain': chain}
         )
 
         cached_honeypot_status = {doc['address']: doc['is_honeypot'] for doc in cached_tokens_cursor}
@@ -321,7 +322,7 @@ class DebotAPIUtils:
 
 
     @staticmethod
-    def get_wallet_avg_buy(self, wallet: str, chain: str, tokens: set) -> Dict[str, Any]:
+    def get_wallet_avg_buy(wallet: str, chain: str, tokens: set) -> Dict[str, Any]:
 
         STABLECOINS = {
             "solana": [
@@ -349,12 +350,13 @@ class DebotAPIUtils:
         stable_buy_volumes_sum = 0.0
         stable_buy_times_sum = 0
         next_cursor = ""
+        max_pages = 100  # 设置最大页数限制
 
         # 预处理地址集合
         target_tokens = {t.lower() for t in tokens}
         stable_coins = {c.lower() for c in STABLECOINS.get(chain, [])}
 
-        for _ in range(self.max_pages):
+        for _ in range(max_pages):
             try:
                 params = {
                     "chain": chain,
@@ -364,18 +366,16 @@ class DebotAPIUtils:
                     "next": next_cursor
                 }
 
-                response = self.client.get(
-                    "https://preapi.debot.ai/api/dashboard/wallet/latest/pnl",
-                    params=params,
-                    timeout=self.timeout
+                response = DebotHTTPUtils.get(
+                    endpoint="api/dashboard/wallet/latest/pnl",
+                    params=params
                 )
 
                 if not response:
                     break
 
-                data = response.json() or {}
-                page_data = data.get("data") or {}
-                holding_tokens = page_data.get("holding_tokens", [])
+                data = response.get("data") or {}
+                holding_tokens = data.get("holding_tokens", [])
 
                 # 处理当前页数据
                 for item in holding_tokens:
@@ -400,7 +400,7 @@ class DebotAPIUtils:
                     if current_time - last_active > 604802:  # 7天+2秒缓冲
                         break
 
-                next_cursor = page_data.get("next", "")
+                next_cursor = data.get("next", "")
                 if not next_cursor:
                     break
 
