@@ -37,7 +37,7 @@ class TaskManager:
 
         self.scheduler.add_job(
             func=self.find_daily_smw_task,
-            trigger=CronTrigger(hour=0, minute=0, second=30, timezone='UTC'
+            trigger=CronTrigger(hour=4, minute=0, second=0, timezone='UTC'
             ),
             id='find_daily_smw_task',
             name='Find Daily Smart Wallet Task',
