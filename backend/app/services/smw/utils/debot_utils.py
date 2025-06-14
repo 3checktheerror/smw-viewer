@@ -229,7 +229,7 @@ class DebotAPIUtils:
                 return token, True
 
         newly_checked_tokens_to_store = []
-        with ThreadPoolManager(max_workers=100) as pool:
+        with ThreadPoolManager(max_workers=50) as pool:
             tasks_args = [(token, chain) for token in tokens_to_check]
             results = pool.execute_tasks_and_wait(is_honeypot_token, tasks_args)
 

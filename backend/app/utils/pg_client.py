@@ -2,13 +2,24 @@ import logging
 from typing import List, Dict, Any, Optional, Tuple
 from contextlib import contextmanager
 from psycopg2.pool import ThreadedConnectionPool
+import threading
 
 
 class PostgreSQLClient:
-    
+    _instance = None
+    _lock = threading.Lock()
+
+    def __new__(cls, *args, **kwargs):
+        if not cls._instance:
+            with cls._lock:
+                if not cls._instance:
+                    cls._instance = super().__new__(cls)
+        return cls._instance
+
     def __init__(self):
-        self.pool = None
-        self._create_pool()
+        if not hasattr(self, 'pool') or self.pool is None:
+            self.pool = None
+            self._create_pool()
 
     def _create_pool(self):
         try:
@@ -51,7 +62,6 @@ class PostgreSQLClient:
                 else:
                     cursor.execute(query)
                 result = cursor.fetchall()
-                cursor.close()
                 return result
             except Exception as e:
                 logging.error(f"PostgreSQL query execution failed: {e}")
@@ -109,11 +119,3 @@ class PostgreSQLClient:
         except Exception as e:
             logging.error(f"Error querying wallets for tokens on {chain}: {e}")
             return {}
-
-    def close(self):
-        """关闭连接池"""
-        try:
-            if self.pool:
-                self.pool.closeall()
-        except Exception as e:
-            logging.error(f"Error closing PostgreSQL pool: {e}")

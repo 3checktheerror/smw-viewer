@@ -424,14 +424,3 @@ class HotTokenRepository:
                 logging.error(f"Error fetching batch 2d trade tokens for chain {chain}: {e}")
 
         return all_results
-
-    def close_connections(self):
-        try:
-            self.mongodb_client.close()
-        except Exception as e:
-            logging.error(f"Error closing MongoDB connection: {e}")
-        
-        try:
-            self.pg_client.close()
-        except Exception as e:
-            logging.error(f"Error closing PostgreSQL connection: {e}")

@@ -29,7 +29,7 @@ class HotTokenFinder:
             except Exception as e:
                 logging.error(f"Error scanning stream {stream_key}: {e}")
         
-        logging.info(f"On-chain token scan completed, total tokens found: {len(all_tokens)}")
+        # logging.info(f"On-chain token scan completed, total tokens found: {len(all_tokens)}")
         return all_tokens
     
     def _process_onchain_tokens(self, tokens: List[Tuple[str, str, str]]) -> int:
@@ -63,8 +63,7 @@ class HotTokenFinder:
             logging.info("No tokens found in streams")
             return 0
         qualified_count = self._process_onchain_tokens(tokens)
-        self.repository.close_connections()
-        logging.info(f"find_daily_token_task completed, found {qualified_count} qualified tokens")
+        # logging.info(f"find_daily_token_task completed, found {qualified_count} qualified tokens")
         return qualified_count
 
 
