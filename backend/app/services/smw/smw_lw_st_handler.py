@@ -34,7 +34,7 @@ class LowStatisticWalletHandler:
                         return False
 
                     winrate = float(market_data.get('winrate_7d', 0.0) or 0.0)
-                    if winrate <= (0.3 if chain in ['bsc', 'solana'] else 0.5):
+                    if winrate <= (0.3 if chain in ['bsc', 'solana'] else 0.3):
                         return False
 
                     buy = market_data.get('buy_times_7d', 0) or 0
