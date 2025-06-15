@@ -21,7 +21,7 @@ class LowStatisticWalletHandler:
             if not is_daily_fetch:
                 if is_second_check:
                     token_winrate = float(market_data.get('token_winrate_7d', 0.0) or 0.0)
-                    if token_winrate <= (0.25 if chain in ['bsc', 'solana'] else 0.25):
+                    if token_winrate <= (0.25 if chain in ['bsc', 'solana'] else 0.3):
                         return False
                     return True
                 else:
@@ -34,7 +34,7 @@ class LowStatisticWalletHandler:
                         return False
 
                     winrate = float(market_data.get('winrate_7d', 0.0) or 0.0)
-                    if winrate <= (0.3 if chain in ['bsc', 'solana'] else 0.3):
+                    if winrate <= (0.3 if chain in ['bsc', 'solana'] else 0.4):
                         return False
 
                     buy = market_data.get('buy_times_7d', 0) or 0
@@ -61,7 +61,7 @@ class LowStatisticWalletHandler:
                         return False
 
                     winrate = float(market_data.get('winrate_30d', 0.0) or 0.0)
-                    if winrate <= (0.3 if chain in ['bsc', 'solana'] else 0.5):
+                    if winrate <= (0.3 if chain in ['bsc', 'solana'] else 0.4):
                         return False
 
                     buy = market_data.get('buy_times_7d', 0) or 0
@@ -325,8 +325,9 @@ class LowStatisticWalletHandler:
                     
                     # 检查7天内代币数量
                     token_data = DebotAPIUtils.get_wallet_7d_token(wallet_address, chain)
-                    if token_data.get("7D_token_num", 0) < 5:
-                        logging.debug(f"钱包 {wallet_address} 7天内代币数量不足5个，跳过")
+                    token_threshold = 3 if chain == 'bsc' else 5
+                    if token_data.get("7D_token_num", 0) < token_threshold:
+                        logging.debug(f"钱包 {wallet_address} 7天内代币数量不足{token_threshold}个，跳过")
                         return None
                     
                     # 通过所有过滤条件
