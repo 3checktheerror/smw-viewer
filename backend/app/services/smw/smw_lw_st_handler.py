@@ -1,6 +1,7 @@
 import logging
 from typing import List, Optional
 
+from backend.app.core.config import settings
 from backend.app.domain.models.wallet import WalletModel
 from backend.app.utils import ThreadPoolManager, MongoDBClient
 import pandas as pd
@@ -21,16 +22,17 @@ class LowStatisticWalletHandler:
             if not is_daily_fetch:
                 if is_second_check:
                     token_winrate = float(market_data.get('token_winrate_7d', 0.0) or 0.0)
-                    if token_winrate <= (0.25 if chain in ['bsc', 'solana'] else 0.3):
+                    if token_winrate <= (0.25 if chain in ['bsc', 'solana'] else 0.32):
                         return False
                     return True
                 else:
+                    threshold = settings.non_daily_pnl_map.get(chain)
                     pnl_7d = float(market_data.get('pnl_7d', 0.0) or 0.0)
-                    if pnl_7d <= (0.35 if chain in ['bsc', 'solana'] else 0.35):
+                    if pnl_7d <= threshold:
                         return False
 
                     avg_cost = float(market_data.get('avg_buy_volume_7d', 0.0) or 0.0)
-                    if avg_cost < 300:
+                    if avg_cost <= (199 if chain in ['bsc'] else 300):
                         return False
 
                     winrate = float(market_data.get('winrate_7d', 0.0) or 0.0)
@@ -40,7 +42,7 @@ class LowStatisticWalletHandler:
                     buy = market_data.get('buy_times_7d', 0) or 0
                     sell = market_data.get('sell_times_7d', 0) or 0
 
-                    if (buy + sell) <= 10:
+                    if (buy + sell) <= 5:
                         return False
 
                     if (buy + sell) >= 300:
@@ -50,24 +52,27 @@ class LowStatisticWalletHandler:
             else:
                 if is_second_check:
                     token_winrate = float(market_data.get('token_winrate_7d', 0.0) or 0.0)
-                    return token_winrate > 0.32
+                    if token_winrate <= (0.25 if chain in ['bsc', 'solana'] else 0.35):
+                        return False
+                    return True
                 else:
-                    pnl_30d = float(market_data.get('pnl_30d', 0.0) or 0.0)
-                    if pnl_30d <= 0.4:
+                    threshold = settings.daily_pnl_map.get(chain)
+                    pnl_7d = float(market_data.get('pnl_7d', 0.0) or 0.0)
+                    if pnl_7d <= threshold:
                         return False
 
-                    avg_cost = float(market_data.get('avg_buy_volume_30d', 0.0) or 0.0)
-                    if avg_cost < 300:
+                    avg_cost = float(market_data.get('avg_buy_volume_7d', 0.0) or 0.0)
+                    if avg_cost <= (199 if chain in ['bsc'] else 300):
                         return False
 
-                    winrate = float(market_data.get('winrate_30d', 0.0) or 0.0)
+                    winrate = float(market_data.get('winrate_7d', 0.0) or 0.0)
                     if winrate <= (0.3 if chain in ['bsc', 'solana'] else 0.4):
                         return False
 
                     buy = market_data.get('buy_times_7d', 0) or 0
                     sell = market_data.get('sell_times_7d', 0) or 0
 
-                    if (buy + sell) <= 10:
+                    if (buy + sell) <= 5:
                         return False
 
                     if (buy + sell) >= 300:
@@ -237,6 +242,7 @@ class LowStatisticWalletHandler:
 
                 token_winrates = self.get_wallet_token_win_rate(chain, valid_wallets.tolist())
                 df = pd.DataFrame.from_dict(pnl_data, orient='index')
+                df = df[df.index.isin(valid_wallets)]
                 df['token_winrate_7d'] = df.index.map(token_winrates)
                 valid_data = df[df.apply(lambda x: LowStatisticWalletHandler.meets_criteria(x.to_dict(), chain, True, is_daily_fetch), axis=1)]
                 return valid_data.to_dict('index')
@@ -339,6 +345,7 @@ class LowStatisticWalletHandler:
             
             # 使用100个线程并行处理钱包过滤
             wallet_addresses = valid_wallet_stats
+            final_valid_wallets = []
             
             if wallet_addresses:
                 logging.info(f"开始并行检查 {len(wallet_addresses)} 个钱包的余额和代币数量")
@@ -355,7 +362,7 @@ class LowStatisticWalletHandler:
                     filtered_wallets.append(wallet_mapping[wallet_address])
             
             processed_so_far += len(chain_wallets)
-            logging.info(f"链 {chain} 处理完成，初步有效钱包数: {len(chain_wallets)}，最终有效钱包数: {len(final_valid_wallets)}")
+            logging.info(f"链 {chain} 处理完成，初步有效钱包数: {len(valid_wallet_stats)}，最终有效钱包数: {len(final_valid_wallets)}")
         
         logging.info(f"总体处理完成，输入钱包数: {len(wallet_list)}, 输出有效钱包数: {len(filtered_wallets)}")
         return filtered_wallets

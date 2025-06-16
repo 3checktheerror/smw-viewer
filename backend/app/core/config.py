@@ -1,7 +1,7 @@
 """
 应用配置管理
 """
-from typing import Optional, List, Tuple
+from typing import Optional, List, Tuple, Dict
 from pydantic import Field
 from pydantic_settings import BaseSettings
 
@@ -96,6 +96,19 @@ class Settings(BaseSettings):
     # 定时任务调度器配置
     scheduler_timezone: str = Field(default="UTC", description="SCHEDULER_TIMEZONE")
     find_daily_token_interval_minutes: int = Field(default=2, description="FIND_DAILY_TOKEN_INTERVAL_MINUTES")
+
+    # PNL Map
+    daily_pnl_map: Dict[str, float] = Field(default={
+        'bsc': 0.35,
+        'base': 0.45,
+        'solana': 0.35
+    })
+
+    non_daily_pnl_map: Dict[str, float] = Field(default={
+        'bsc': 0.3,
+        'base': 0.4,
+        'solana': 0.3
+    })
 
 
 

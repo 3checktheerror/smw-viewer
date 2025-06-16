@@ -60,6 +60,12 @@ class TimeUtils:
        return int(datetime.now(timezone.utc).replace(
             hour=0, minute=0, second=0, microsecond=0
         ).timestamp()) - 86400
+
+    @staticmethod
+    def get_7_prev_utc_0_hour_ts() -> int:
+       return int(datetime.now(timezone.utc).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        ).timestamp()) - 86400 * 7
     
     @staticmethod
     def get_prev_utc_day_time_range() -> tuple[int, int]:

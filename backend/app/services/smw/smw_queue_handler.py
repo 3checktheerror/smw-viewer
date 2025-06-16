@@ -66,7 +66,7 @@ class SMWQueueHandlerTask:
 
         # Cleanup old report files
         logging.info("Cleaning up old report files...")
-        report_dir = os.path.join(os.path.dirname(__file__), '..', 'report')
+        report_dir = os.path.join(os.path.dirname(__file__), 'report')
         if not os.path.isdir(report_dir):
             logging.info("Report directory does not exist, skipping cleanup.")
             return
