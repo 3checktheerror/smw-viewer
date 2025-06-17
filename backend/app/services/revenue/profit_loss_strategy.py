@@ -99,9 +99,9 @@ class ProfitLossStrategy:
         active_tp_rules.sort(key=lambda x: x['target_price'])
         active_sl_rules.sort(key=lambda x: x['target_price'], reverse=True)
 
-        logging.info("--- 模拟开始 ---")
+        # logging.info("--- 模拟开始 ---")
         # 使用 to_eng_string() 避免科学计数法，并用 format 控制小数位数
-        logging.info(f"入场价格: {signal_price_dec:.8f}, 初始成本: ${initial_cost_dec:.4f}")
+        # logging.info(f"入场价格: {signal_price_dec:.8f}, 初始成本: ${initial_cost_dec:.4f}")
 
         # --- 2. 遍历K线数据进行模拟 ---
         simulation_end_time = signal_ts + duration
@@ -148,10 +148,10 @@ class ProfitLossStrategy:
                             elif 'z' in rule:  # Take profit rule
                                 rule_detail = f" (z={rule['z']}, s={rule['s']})"
 
-                            logging.info(f"时间: {candle['time']}, 价格范围触及目标 {rule['target_price']:.8f}, 触发 {event}{rule_detail}!")
-                            logging.info(
-                                f"  在价格 {execution_price:.8f} 卖出 {sell_amount:.8f} 个币, 获得收入 ${revenue_this_trade:.4f}")
-                            logging.info(f"  剩余持仓: {current_holdings:.8f} 个币, 累计收入: ${total_revenue_dec:.4f}")
+                            # logging.info(f"时间: {candle['time']}, 价格范围触及目标 {rule['target_price']:.8f}, 触发 {event}{rule_detail}!")
+                            # logging.info(
+                            #     f"  在价格 {execution_price:.8f} 卖出 {sell_amount:.8f} 个币, 获得收入 ${revenue_this_trade:.4f}")
+                            # logging.info(f"  剩余持仓: {current_holdings:.8f} 个币, 累计收入: ${total_revenue_dec:.4f}")
 
             # 检查触发顺序：先检查是否需要止损，再检查是否能够止盈
             # 如果是阳线 (收盘 >= 开盘)，价格先下跌后上涨，所以先检查止损
@@ -163,16 +163,16 @@ class ProfitLossStrategy:
                 process_triggers(active_tp_rules, is_stop_loss=False)
                 process_triggers(active_sl_rules, is_stop_loss=True)
 
-        logging.info("--- 模拟结束 ---")
+        # logging.info("--- 模拟结束 ---")
 
         # 如果最后仍有持仓，按最后一根K线的收盘价计算剩余价值
         if current_holdings > Decimal('1e-18') and k_line_data_dec:
             last_close_price = k_line_data_dec[-1]['close']
             remaining_value = current_holdings * last_close_price
             total_revenue_dec += remaining_value
-            logging.info(
-                f"模拟结束时仍有持仓 {current_holdings:.8f} 个币, 按最后收盘价 {last_close_price:.8f} 计算剩余价值 ${remaining_value:.4f}")
-            logging.info(f"最终总收入: ${total_revenue_dec:.4f}")
+            # logging.info(
+            #     f"模拟结束时仍有持仓 {current_holdings:.8f} 个币, 按最后收盘价 {last_close_price:.8f} 计算剩余价值 ${remaining_value:.4f}")
+            # logging.info(f"最终总收入: ${total_revenue_dec:.4f}")
 
         # --- 3. 计算最终收益率 ---
         if initial_cost_dec == 0:

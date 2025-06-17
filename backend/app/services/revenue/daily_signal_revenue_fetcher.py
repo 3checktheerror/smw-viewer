@@ -9,6 +9,7 @@ from backend.app.domain.models.token import TokenModel, TokenRevenueModel
 from backend.app.services.revenue.kline_fetcher import KLineFetcher
 from backend.app.utils.mongo_client import MongoDBClient
 from backend.app.utils.time_utils import TimeUtils
+from backend.app.utils.thread_pool import ThreadPoolManager
 
 
 class SignalRevenueStatisticsFetcher:
@@ -59,67 +60,88 @@ class SignalRevenueStatisticsFetcher:
             logging.warning("No signals passed the first_signal_time filter.")
             return []
 
-        # 3. Fetch K-lines for filtered signals
-        kline_fetcher = KLineFetcher()
+        # 3. Fetch K-lines for filtered signals using a thread pool
         final_results = []
 
-        for store_time, signals in filtered_signals_by_store_time.items():
-            logging.info(f"Processing {len(signals)} signals for store_time: {store_time}")
+        def _process_daily_signals(store_time: str, signals: List[dict]) -> Optional[RevenueModel]:
+            """
+            Internal helper executed inside a thread to process signals of a single day.
+            """
+            try:
+                logging.info(f"Processing {len(signals)} signals for store_time: {store_time}")
 
-            # De-duplicate signals by token, keeping the one with the earliest first_signal_time
-            unique_signals_by_token = {}
-            for s in signals:
-                token = s['token']
-                if token not in unique_signals_by_token or s['first_signal_time'] < unique_signals_by_token[token]['first_signal_time']:
-                    unique_signals_by_token[token] = s
+                # De-duplicate signals by token, keeping the one with the earliest first_signal_time
+                unique_signals_by_token = {}
+                for s in signals:
+                    token_addr = s['token']
+                    if token_addr not in unique_signals_by_token or s['first_signal_time'] < unique_signals_by_token[token_addr]['first_signal_time']:
+                        unique_signals_by_token[token_addr] = s
 
-            signals = list(unique_signals_by_token.values())
-            logging.info(f"Processing {len(signals)} unique signals for store_time: {store_time}")
+                signals = list(unique_signals_by_token.values())
+                logging.info(f"Processing {len(signals)} unique signals for store_time: {store_time}")
 
-            token_list = list({s['token']: TokenRevenueModel(address=s['token'], chain=s['chain'], first_signal_time=s['first_signal_time']) for s in signals}.values())
+                token_list = list({s['token']: TokenRevenueModel(address=s['token'], chain=s['chain'], first_signal_time=s['first_signal_time']) for s in signals}.values())
 
-            klines_data = kline_fetcher.fetch_klines(
-                token_list=token_list,
-                duration=duration
-            )
+                # Each thread has its own KLineFetcher instance
+                kline_fetcher = KLineFetcher()
+                klines_data = kline_fetcher.fetch_klines(
+                    token_list=token_list,
+                    duration=duration
+                )
 
-            # 4. Calculate signal_price and structure data
-            info_list = []
-            for signal in signals:
-                chain = signal['chain']
-                token_address = signal['token']
-                first_signal_time = signal['first_signal_time']
+                # 4. Calculate signal_price and structure data
+                info_list: List[RevenueInfoModel] = []
+                for signal in signals:
+                    chain = signal['chain']
+                    token_address = signal['token']
+                    first_signal_time = signal['first_signal_time']
 
-                kline_list = klines_data.get(chain, {}).get(token_address)
-                signal_price = None
+                    kline_list = klines_data.get(chain, {}).get(token_address)
+                    signal_price = None
 
-                if kline_list:
-                    # Find k-line point with time less than or equal to first_signal_time
-                    # and closest to first_signal_time.
-                    klines_before_signal = [k for k in kline_list if k['time'] <= first_signal_time]
-                    if klines_before_signal:
-                        # Find the latest k-line among those
-                        closest_kline = max(klines_before_signal, key=lambda k: k['time'])
-                        signal_price = closest_kline['open']
+                    if kline_list:
+                        # Find k-line point with time less than or equal to first_signal_time
+                        # and closest to first_signal_time.
+                        klines_before_signal = [k for k in kline_list if k['time'] <= first_signal_time]
+                        if klines_before_signal:
+                            # Find the latest k-line among those
+                            closest_kline = max(klines_before_signal, key=lambda k: k['time'])
+                            signal_price = closest_kline['open']
 
-                    # Format kline data
-                    formatted_kline = [
-                        {"time": k["time"], "open": k["open"], "high": k["high"], "low": k["low"], "close": k["close"]}
-                        for k in kline_list
-                    ]
-                else:
-                    formatted_kline = []
+                        # Format kline data
+                        formatted_kline = [
+                            {"time": k["time"], "open": k["open"], "high": k["high"], "low": k["low"], "close": k["close"]}
+                            for k in kline_list
+                        ]
+                    else:
+                        formatted_kline = []
 
-                info_list.append(RevenueInfoModel(
-                    token=token_address,
-                    kline=formatted_kline,
-                    signal_time=first_signal_time,
-                    signal_price=signal_price
-                ))
+                    info_list.append(RevenueInfoModel(
+                        token=token_address,
+                        kline=formatted_kline,
+                        signal_time=first_signal_time,
+                        signal_price=signal_price
+                    ))
 
-            date_dt = datetime.strptime(store_time, '%Y-%m-%d')
-            date_timestamp = int(date_dt.timestamp()) - 86400
+                date_dt = datetime.strptime(store_time, '%Y-%m-%d')
+                date_timestamp = int(date_dt.timestamp()) - 86400
 
-            final_results.append(RevenueModel(date=date_timestamp, info=info_list))
+                return RevenueModel(date=date_timestamp, info=info_list)
+            except Exception as e:
+                logging.error(f"Error processing signals for store_time {store_time}: {e}")
+                return None
+
+        # Submit each day's calculation to thread pool
+        with ThreadPoolManager(max_workers=5) as manager:
+            tasks_args = [(store_time, signals) for store_time, signals in filtered_signals_by_store_time.items()]
+            results = manager.execute_tasks_and_wait(_process_daily_signals, tasks_args, show_log=False)
+
+        # Filter out failed tasks (None) and aggregate
+        for res in results:
+            if res:
+                final_results.append(res)
+
+        # Optionally, sort results by date for consistency
+        final_results.sort(key=lambda r: r.date)
 
         return final_results

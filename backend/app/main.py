@@ -23,8 +23,11 @@ app.add_middleware(
 app.include_router(signal_revenue_api.router, prefix="/api", tags=["Signal Revenue"])
 
 
-if __name__ == "__main__":
+@app.on_event("startup")
+async def init_logging():
     setup_logging()
+
+if __name__ == "__main__":
     uvicorn.run(
         "backend.app.main:app",
         host="127.0.0.1",
