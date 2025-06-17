@@ -100,13 +100,13 @@ class Settings(BaseSettings):
     # PNL Map
     daily_pnl_map: Dict[str, float] = Field(default={
         'bsc': 0.35,
-        'base': 0.45,
+        'base': 0.50,
         'solana': 0.35
     })
 
     non_daily_pnl_map: Dict[str, float] = Field(default={
         'bsc': 0.3,
-        'base': 0.4,
+        'base': 0.45,
         'solana': 0.3
     })
 

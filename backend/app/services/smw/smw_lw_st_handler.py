@@ -22,7 +22,7 @@ class LowStatisticWalletHandler:
             if not is_daily_fetch:
                 if is_second_check:
                     token_winrate = float(market_data.get('token_winrate_7d', 0.0) or 0.0)
-                    if token_winrate <= (0.25 if chain in ['bsc', 'solana'] else 0.32):
+                    if token_winrate <= (0.25 if chain in ['bsc', 'solana'] else 0.33):
                         return False
                     return True
                 else:
