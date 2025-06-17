@@ -122,18 +122,4 @@ class SignalRevenueStatisticsFetcher:
 
             final_results.append(RevenueModel(date=date_timestamp, info=info_list))
 
-        # 5. Save results to a JSON file
-        output_dir = os.path.dirname(__file__)
-        output_filename = f"revenue_stats_{original_start_ts}_{original_end_ts}.json"
-        output_path = os.path.join(output_dir, output_filename)
-
-        serializable_results = [model.dict() for model in final_results]
-
-        try:
-            with open(output_path, 'w') as f:
-                json.dump(serializable_results, f, indent=4)
-            logging.info(f"Successfully saved revenue stats to {output_path}")
-        except IOError as e:
-            logging.error(f"Failed to save results to {output_path}: {e}")
-
         return final_results

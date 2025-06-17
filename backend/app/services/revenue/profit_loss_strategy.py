@@ -190,13 +190,13 @@ def mock_data():
     initial_used_input = 1000.0
 
     # 信号触发价格 (告警价格)
-    signal_price_input = 0.00004959051409
+    signal_price_input = 0.0002746159131
 
     # 信号触发时间戳 (例如：10分钟前)
-    signal_ts_input = 1749962398
+    signal_ts_input = 1750111084
 
     # 策略生效的最大持续时间 (例如：1小时)
-    duration_input = 600
+    duration_input = 7200
 
     # 生成K线数据 (在策略有效期前后各增加5分钟的缓冲数据)
     with open('data.json', 'r') as f:
@@ -206,15 +206,15 @@ def mock_data():
     # 止盈 (Take Profit) 策略规则
     # 'z' 是上涨幅度, 's' 是卖出持有代币的比例
     tp_rules_input = [
-        {'z': 0.05, 's': 0.3},  # 上涨 10% 时, 卖出 30%
-        {'z': 0.25, 's': 1.0},  # 上涨 25% 时, 再卖出剩余部分的 50%
+        {'z': 0.3, 's': 0.3},  # 上涨 10% 时, 卖出 30%
+        {'z': 0.5, 's': 1.0},  # 上涨 25% 时, 再卖出剩余部分的 50%
     ]
 
     # 止损 (Stop Loss) 策略规则
     # 'd' 是下跌目标价与初始价格的比值, 's' 是卖出持有代币的比例
     sl_rules_input = [
-        {'d': 0.90, 's': 0.5},  # 价格跌至初始价的 90% 时, 卖出 50%
-        {'d': 0.80, 's': 1.0},  # 价格跌至初始价的 80% 时, 卖出剩余的 100%
+        {'d': 0.60, 's': 0.2},  # 价格跌至初始价的 90% 时, 卖出 50%
+        {'d': 0.30, 's': 1.0},  # 价格跌至初始价的 80% 时, 卖出剩余的 100%
     ]
 
     res = ProfitLossStrategy.get_single_token_profit(initial_used_input, signal_price_input, signal_ts_input,k_line_data_input, tp_rules_input, sl_rules_input, duration_input)

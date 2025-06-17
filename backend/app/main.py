@@ -1,12 +1,10 @@
-"""
-Smart Wallet Dashboard FastAPI 应用主入口
-"""
-import logging
+import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from backend.app.core.config import settings
+from backend.app.api.endpoints import signal_revenue_api
+from backend.app.utils.log_utils import setup_logging
 
-# 创建FastAPI应用实例
 app = FastAPI(
     title=settings.app_name,
     version=settings.app_version,
@@ -16,28 +14,20 @@ app = FastAPI(
 # 配置CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # 在生产环境中应该设置具体的域名
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-
-@app.get("/")
-async def root():
-    """根路径"""
-    return {
-        "message": f"Welcome to {settings.app_name}",
-        "version": settings.app_version,
-        "environment": settings.environment
-    }
+app.include_router(signal_revenue_api.router, prefix="/api", tags=["Signal Revenue"])
 
 
-@app.get("/health")
-async def health_check():
-    """健康检查端点"""
-    return {
-        "status": "healthy",
-        "app_name": settings.app_name,
-        "version": settings.app_version
-    }
+if __name__ == "__main__":
+    setup_logging()
+    uvicorn.run(
+        "backend.app.main:app",
+        host="127.0.0.1",
+        port=3004,
+        reload=True
+    )
