@@ -102,9 +102,7 @@ class SMWQueueHandlerTask:
         # 1. Get initial state of all queues for reporting and processing
         initial_wallets_docs = {q_name: mongo_client.find_many(collection_name=q_name, db_name=q_db) for q_name in queues}
 
-        report_data['initial_queue_1'] = [WalletModel(**w) for w in initial_wallets_docs[q1_name]]
-        report_data['initial_queue_2'] = [WalletModel(**w) for w in initial_wallets_docs[q2_name]]
-        report_data['initial_queue_3'] = [WalletModel(**w) for w in initial_wallets_docs[q3_name]]
+        # Removed initial_queue_* categories as per updated reporting requirements.
 
         q1_wallets = [WalletModel(**w) for w in initial_wallets_docs[q1_name]]
         q2_wallets = [WalletModel(**w) for w in initial_wallets_docs[q2_name]]
@@ -118,7 +116,7 @@ class SMWQueueHandlerTask:
         if q1_wallets:
             _, rejected_q1_low, rejected_q1_tx = SMWFilterUtils.start_filter(q1_wallets, is_daily_fetch=False)
             demoted_from_q1 = rejected_q1_low + rejected_q1_tx
-            report_data['demoted_from_queue_1_to_2'] = demoted_from_q1
+            report_data['变动：Top -> Mid'] = demoted_from_q1
             wallets_to_add[q2_name].extend(demoted_from_q1)
             wallets_to_delete[q1_name].extend(demoted_from_q1)
 
@@ -127,8 +125,8 @@ class SMWQueueHandlerTask:
         if q2_wallets:
             promoted_from_q2, rejected_q2_low, rejected_q2_tx = SMWFilterUtils.start_filter(q2_wallets, is_daily_fetch=False)
             demoted_from_q2 = rejected_q2_low + rejected_q2_tx
-            report_data['promoted_from_queue_2_to_1'] = promoted_from_q2
-            report_data['demoted_from_queue_2_to_3'] = demoted_from_q2
+            report_data['变动：Mid -> Top'] = promoted_from_q2
+            report_data['变动：Mid -> Bottom'] = demoted_from_q2
             wallets_to_add[q1_name].extend(promoted_from_q2)
             wallets_to_add[q3_name].extend(demoted_from_q2)
             wallets_to_delete[q2_name].extend(q2_wallets)
@@ -138,8 +136,8 @@ class SMWQueueHandlerTask:
         if q3_wallets:
             promoted_from_q3, rejected_q3_low, rejected_q3_tx = SMWFilterUtils.start_filter(q3_wallets, is_daily_fetch=False)
             eliminated_from_q3 = rejected_q3_low + rejected_q3_tx
-            report_data['promoted_from_queue_3_to_2'] = promoted_from_q3
-            report_data['eliminated_from_queue_3'] = eliminated_from_q3
+            report_data['变动：Bottom -> Mid'] = promoted_from_q3
+            report_data['变动：Bottom -> '] = eliminated_from_q3
             wallets_to_add[q2_name].extend(promoted_from_q3)
             wallets_to_delete[q3_name].extend(q3_wallets)
 
@@ -173,9 +171,11 @@ class SMWQueueHandlerTask:
         # 6. Supply new wallets to queue_2
         logging.info("Supplying new wallets to queue_2...")
         if new_wallets:
-            SMWFilterManager.supply_smw_routine(wallets_data=new_wallets)
+            final_wallets, _, _ = SMWFilterManager.supply_smw_routine(wallets_data=new_wallets)
+            report_data['增量'] = final_wallets
         else:
             logging.info("No new wallets to supply.")
+            report_data['增量'] = []
 
         # 7. Generate SMW buy statistics for the new state of queue_1
         logging.info("Generating SMW buy statistics for queue_1...")
@@ -185,7 +185,14 @@ class SMWQueueHandlerTask:
         else:
             logging.info("Queue 1 is empty. Skipping statistics generation.")
 
-        # 8. Generate and write the final report
+        # 8. Capture the final state of each queue for reporting
+        q2_updated_data = mongo_client.find_many(collection_name=q2_name, db_name=q_db)
+        q3_updated_data = mongo_client.find_many(collection_name=q3_name, db_name=q_db)
+        report_data['结果：Top-队列'] = [WalletModel(**w) for w in q1_updated_data]
+        report_data['结果：Mid-队列'] = [WalletModel(**w) for w in q2_updated_data]
+        report_data['结果：Bottom-队列'] = [WalletModel(**w) for w in q3_updated_data]
+
+        # 9. Generate and write the final report
         SMWQueueHandlerTask._write_report(report_data)
 
         logging.info("Daily queue shuffle and supply process finished.")
