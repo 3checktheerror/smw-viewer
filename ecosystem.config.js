@@ -13,6 +13,7 @@ module.exports = {
     script: './myenv/bin/uvicorn',
     args: 'backend.app.main:app --host 0.0.0.0 --port 3004',
     cwd: __dirname,
+    interpreter: 'none',
     env: {
       PYTHONPATH: '.',
     },
