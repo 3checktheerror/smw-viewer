@@ -36,7 +36,9 @@ class SignalRevenueCalculator:
                                  tp_rules: List[Dict[str, float]],
                                  sl_rules: List[Dict[str, float]],
                                  start_ts: int = 0,
-                                 end_ts: int = 4116779249):
+                                 end_ts: int = 4116779249,
+                                 whitelist_tokens: List[str] = None,
+                                 blacklist_tokens: List[str] = None):
         """
         Calculates the profit and loss for signals within a given time range based on provided strategies.
 
@@ -47,6 +49,8 @@ class SignalRevenueCalculator:
             sl_rules (List[Dict[str, float]]): Stop-loss strategy rules.
             start_ts (int, optional): The start timestamp for fetching signals. Defaults to 0.
             end_ts (int, optional): The end timestamp for fetching signals. Defaults to a far-future timestamp.
+            whitelist_tokens (List[str], optional): A list of token addresses to include. Defaults to None.
+            blacklist_tokens (List[str], optional): A list of token addresses to exclude. Defaults to None.
 
         Returns:
             dict: A dictionary containing the results.
@@ -55,7 +59,9 @@ class SignalRevenueCalculator:
         revenue_models = SignalRevenueStatisticsFetcher.get_signal_revenue_stats(
             duration=duration,
             start_ts=start_ts,
-            end_ts=end_ts
+            end_ts=end_ts,
+            whitelist_tokens=whitelist_tokens,
+            blacklist_tokens=blacklist_tokens
         )
 
         if not revenue_models:
@@ -146,7 +152,8 @@ if __name__ == '__main__':
         duration=7200,
         tp_rules=tp_rules_input,
         sl_rules = sl_rules_input,
-        start_ts=TimeUtils.get_prev_utc_0_hour_ts()
+        start_ts=TimeUtils.get_prev_utc_0_hour_ts(),
+        whitelist_tokens=['0x6B175474E89094C44Da98b954EedeAC495271d0F'],
     )
 
     print(json.dumps(res, indent=2))

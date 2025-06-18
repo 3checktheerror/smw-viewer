@@ -9,4 +9,6 @@ class SignalRevenueRequest(BaseModel):
     tp_rules: List[Dict[str, float]] = Field(..., description="止盈策略规则")
     sl_rules: List[Dict[str, float]] = Field(..., description="止损策略规则")
     start_ts: int = Field(default=0, description="开始时间戳")
-    end_ts: int = Field(default=4116779249, description="结束时间戳") 
+    end_ts: int = Field(default=4116779249, description="结束时间戳")
+    whitelist_tokens: Optional[List[str]] = Field(default=None, description="白名单代币列表")
+    blacklist_tokens: Optional[List[str]] = Field(default=None, description="黑名单代币列表") 

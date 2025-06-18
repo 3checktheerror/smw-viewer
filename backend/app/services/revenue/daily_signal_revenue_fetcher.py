@@ -18,7 +18,9 @@ class SignalRevenueStatisticsFetcher:
         pass
 
     @staticmethod
-    def get_signal_revenue_stats(duration: int, start_ts: int = 0, end_ts: int = 4116779249) -> List[RevenueModel]:
+    def get_signal_revenue_stats(duration: int, start_ts: int = 0, end_ts: int = 4116779249,
+                                 whitelist_tokens: Optional[List[str]] = None,
+                                 blacklist_tokens: Optional[List[str]] = None) -> List[RevenueModel]:
         """
         Fetches signal revenue statistics.
         """
@@ -31,7 +33,11 @@ class SignalRevenueStatisticsFetcher:
         start_date_str = datetime.fromtimestamp(start_ts).strftime('%Y-%m-%d')
         end_date_str = datetime.fromtimestamp(end_ts).strftime('%Y-%m-%d')
 
-        query = {"store_time": {"$gte": start_date_str, "$lte": end_date_str}}
+        query: dict = {"store_time": {"$gte": start_date_str, "$lte": end_date_str}}
+        if whitelist_tokens:
+            query["token"] = {"$in": whitelist_tokens}
+        elif blacklist_tokens:
+            query["token"] = {"$nin": blacklist_tokens}
         projection = {"chain": 1, "token": 1, "first_signal_time": 1, "store_time": 1}
 
         logging.info(f"Fetching signals from MongoDB with query: {query}")

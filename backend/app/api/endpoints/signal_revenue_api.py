@@ -19,7 +19,9 @@ async def get_signal_revenue(request: SignalRevenueRequest):
             tp_rules=request.tp_rules,
             sl_rules=request.sl_rules,
             start_ts=request.start_ts,
-            end_ts=request.end_ts
+            end_ts=request.end_ts,
+            whitelist_tokens=request.whitelist_tokens,
+            blacklist_tokens=request.blacklist_tokens
         )
         if result:
             return CommonResult().success(data=result)
