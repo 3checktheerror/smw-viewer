@@ -99,7 +99,7 @@ class SignalRevenueCalculator:
             results = manager.execute_tasks_and_wait(
                 func=SignalRevenueCalculator._calculate_profit_for_signal,
                 tasks_args=tasks_args,
-                show_log=True
+                show_log=False
             )
 
         # 5. Process and aggregate results
@@ -108,7 +108,7 @@ class SignalRevenueCalculator:
 
         for signal_info, result in results:
             if result:
-                total_revenue, initial_cost, roi = result
+                total_revenue, initial_cost, roi, trigger_events = result
                 sum_revenue += total_revenue
 
                 token_results.append({
@@ -116,7 +116,8 @@ class SignalRevenueCalculator:
                     "signal_time": signal_info.signal_time,
                     "total_revenue": total_revenue,
                     "initial_cost": initial_cost,
-                    "final_roi": roi
+                    "final_roi": roi,
+                    "trigger_event": trigger_events
                 })
 
         # 6. Calculate final summary

@@ -38,6 +38,7 @@ class ProfitLossStrategy:
             total_revenue (float): 收益 (美金),
             initial_cost (float): 总投入 (美金),
             final_roi (float): 收益率.
+            trigger_events (List[int]): 触发事件类型列表 (1: 止盈, 2: 止损, 3: 到期平仓).
         """
         # --- 设置Decimal精度 ---
         # 30位精度对于绝大多数金融计算都已足够
@@ -53,6 +54,9 @@ class ProfitLossStrategy:
             current_holdings = initial_used_dec / signal_price_dec if signal_price_dec != 0 else Decimal('0')
             initial_cost_dec = initial_used_dec
             total_revenue_dec = Decimal('0.0')
+
+            # 初始化触发事件标志
+            trigger_events = set()
 
             # 转换止盈规则
             active_tp_rules = [
@@ -94,7 +98,7 @@ class ProfitLossStrategy:
         except Exception as e:
             logging.info(f"Error during Decimal conversion: {e}")
             # 如果转换失败，返回零值避免崩溃
-            return 0.0, float(initial_used), 0.0
+            return 0.0, float(initial_used), 0.0, []
 
         active_tp_rules.sort(key=lambda x: x['target_price'])
         active_sl_rules.sort(key=lambda x: x['target_price'], reverse=True)
@@ -112,14 +116,14 @@ class ProfitLossStrategy:
 
             # 使用一个极小值来判断持仓是否耗尽
             if current_holdings <= Decimal('1e-18'):
-                logging.info("所有代币已卖出，结束。")
+                # logging.info("所有代币已卖出，结束。")
                 break
 
             candle_high = candle['high']
             candle_low = candle['low']
 
             def process_triggers(rules_to_check: list[dict], is_stop_loss: bool):
-                nonlocal current_holdings, total_revenue_dec
+                nonlocal current_holdings, total_revenue_dec, trigger_events
                 for rule in rules_to_check:
                     if not rule['triggered']:
                         triggered = False
@@ -141,12 +145,17 @@ class ProfitLossStrategy:
                             current_holdings -= sell_amount
                             rule['triggered'] = True
 
-                            event = "止损" if is_stop_loss else "止盈"
-                            rule_detail = ""
-                            if 'd' in rule:  # Stop loss rule
-                                rule_detail = f" (d={rule['d']}, s={rule['s']})"
-                            elif 'z' in rule:  # Take profit rule
-                                rule_detail = f" (z={rule['z']}, s={rule['s']})"
+                            if is_stop_loss:
+                                trigger_events.add(2)
+                            else:
+                                trigger_events.add(1)
+
+                            # event = "止损" if is_stop_loss else "止盈"
+                            # rule_detail = ""
+                            # if 'd' in rule:  # Stop loss rule
+                            #     rule_detail = f" (d={rule['d']}, s={rule['s']})"
+                            # elif 'z' in rule:  # Take profit rule
+                            #     rule_detail = f" (z={rule['z']}, s={rule['s']})"
 
                             # logging.info(f"时间: {candle['time']}, 价格范围触及目标 {rule['target_price']:.8f}, 触发 {event}{rule_detail}!")
                             # logging.info(
@@ -167,6 +176,7 @@ class ProfitLossStrategy:
 
         # 如果最后仍有持仓，按最后一根K线的收盘价计算剩余价值
         if current_holdings > Decimal('1e-18') and k_line_data_dec:
+            trigger_events.add(3)
             last_close_price = k_line_data_dec[-1]['close']
             remaining_value = current_holdings * last_close_price
             total_revenue_dec += remaining_value
@@ -174,7 +184,7 @@ class ProfitLossStrategy:
             #     f"模拟结束时仍有持仓 {current_holdings:.8f} 个币, 按最后收盘价 {last_close_price:.8f} 计算剩余价值 ${remaining_value:.4f}")
             # logging.info(f"最终总收入: ${total_revenue_dec:.4f}")
 
-        # --- 3. 计算最终收益率 ---
+        # --- 3. 计算最终收益率和触发事件 ---
         if initial_cost_dec == 0:
             final_roi_dec = Decimal('0.0')
         else:
@@ -182,8 +192,9 @@ class ProfitLossStrategy:
             profit = total_revenue_dec - initial_cost_dec
             final_roi_dec = profit / initial_cost_dec
 
+
         # 将Decimal结果转换为float返回，保持接口一致性
-        return float(total_revenue_dec), float(initial_cost_dec), float(final_roi_dec)
+        return float(total_revenue_dec), float(initial_cost_dec), float(final_roi_dec), list(trigger_events)
 
 
 def mock_data():

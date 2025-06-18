@@ -7,6 +7,7 @@ class RevenueInfoModel(BaseModel):
     kline: List[Dict[str, Any]]
     signal_time: int
     signal_price: Optional[float] = None
+    trigger_event: Optional[List[int]] = None
 
 
 class RevenueModel(BaseModel):
