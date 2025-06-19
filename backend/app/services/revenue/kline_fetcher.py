@@ -38,7 +38,9 @@ class KLineFetcher:
             self,
             token_list: List[TokenRevenueModel],
             duration: int,
-            interval: int = 1
+            interval: int = 1,
+            progress_callback=None,
+            batch_size: int = 10
     ) -> Dict[str, Dict[str, Any]]:
         """
         Fetches K-line data for a list of tokens in parallel.
@@ -54,9 +56,31 @@ class KLineFetcher:
             mapping token addresses to their corresponding K-line data.
         """
 
-        with ThreadPoolManager(max_workers=30) as manager:
+        with ThreadPoolManager(max_workers=50) as manager:
             tasks_args = [(token, token.first_signal_time, duration, interval) for token in token_list]
-            results = manager.execute_tasks_and_wait(self._fetch_one_kline, tasks_args, show_log=True)
+
+            if progress_callback is None:
+                results = manager.execute_tasks_and_wait(self._fetch_one_kline, tasks_args, show_log=False)
+            else:
+                completed_inner = 0
+
+                def _inner_progress(_):
+                    nonlocal completed_inner
+                    completed_inner += 1
+                    if completed_inner % batch_size == 0:
+                        progress_callback(batch_size)
+
+                results = manager.execute_tasks_with_progress(
+                    func=self._fetch_one_kline,
+                    tasks_args=tasks_args,
+                    progress_callback=_inner_progress,
+                    show_log=False
+                )
+
+                # flush remainder
+                remainder = completed_inner % batch_size
+                if remainder:
+                    progress_callback(remainder)
 
         final_results: Dict[str, Dict[str, Any]] = {}
         for result in results:

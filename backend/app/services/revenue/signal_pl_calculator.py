@@ -38,7 +38,8 @@ class SignalRevenueCalculator:
                                  start_ts: int = 0,
                                  end_ts: int = 4116779249,
                                  whitelist_tokens: List[str] = None,
-                                 blacklist_tokens: List[str] = None):
+                                 blacklist_tokens: List[str] = None,
+                                 progress_callback=None):
         """
         Calculates the profit and loss for signals within a given time range based on provided strategies.
 
@@ -51,6 +52,7 @@ class SignalRevenueCalculator:
             end_ts (int, optional): The end timestamp for fetching signals. Defaults to a far-future timestamp.
             whitelist_tokens (List[str], optional): A list of token addresses to include. Defaults to None.
             blacklist_tokens (List[str], optional): A list of token addresses to exclude. Defaults to None.
+            progress_callback (callable, optional): A callback function to update progress. Defaults to None.
 
         Returns:
             dict: A dictionary containing the results.
@@ -61,7 +63,8 @@ class SignalRevenueCalculator:
             start_ts=start_ts,
             end_ts=end_ts,
             whitelist_tokens=whitelist_tokens,
-            blacklist_tokens=blacklist_tokens
+            blacklist_tokens=blacklist_tokens,
+            progress_callback=progress_callback
         )
 
         if not revenue_models:

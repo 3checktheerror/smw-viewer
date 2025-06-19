@@ -36,7 +36,7 @@ class Settings(BaseSettings):
     postgres_db: str = Field(default="diting_database", description="PostgreSQL database name")
     
     # Redis 配置
-    redis_url: str = Field(default="redis://localhost:6379/0", description="REDIS_URL")
+    redis_url: str = Field(default="redis://:kekedebot123@35.239.102.169:6379/1", description="REDIS_URL")
     
     # Redis Sentinel 配置 (用于热门代币查找器)
     redis_sentinel_addrs: List[Tuple[str, int]] = Field(

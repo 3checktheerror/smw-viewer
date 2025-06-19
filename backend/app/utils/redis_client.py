@@ -2,9 +2,11 @@
 Redis客户端工具类
 """
 import logging
+import asyncio
 
 import redis
 import redis.sentinel
+import redis.asyncio as aioredis
 from typing import Optional, List, Dict, Any, Union
 from backend.app.core.config import settings
 from backend.app.utils.thread_pool import ThreadPoolManager
@@ -114,3 +116,29 @@ class RedisSentinelClient:
         except Exception as e:
             logging.error(f"Unexpected error during batch hgetall: {e}")
             return {}
+
+
+class RedisClient:
+    """通用Redis客户端，按事件循环隔离连接池，避免跨 Loop 错误"""
+
+    _pools: dict[int, aioredis.ConnectionPool] = {}
+
+    @classmethod
+    def _get_pool(cls) -> aioredis.ConnectionPool:
+        loop_id = id(asyncio.get_running_loop())
+        pool = cls._pools.get(loop_id)
+        if pool is None or pool.connection_kwargs.get("_closed", False):
+            pool = aioredis.ConnectionPool.from_url(
+                settings.redis_url,
+                decode_responses=True,
+                socket_timeout=10,
+                socket_connect_timeout=10
+            )
+            cls._pools[loop_id] = pool
+        return pool
+
+    @classmethod
+    def get_client(cls) -> aioredis.Redis:
+        """获取与当前事件循环绑定的 Redis 客户端"""
+        pool = cls._get_pool()
+        return aioredis.Redis(connection_pool=pool)

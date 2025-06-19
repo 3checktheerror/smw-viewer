@@ -20,7 +20,8 @@ class SignalRevenueStatisticsFetcher:
     @staticmethod
     def get_signal_revenue_stats(duration: int, start_ts: int = 0, end_ts: int = 4116779249,
                                  whitelist_tokens: Optional[List[str]] = None,
-                                 blacklist_tokens: Optional[List[str]] = None) -> List[RevenueModel]:
+                                 blacklist_tokens: Optional[List[str]] = None,
+                                 progress_callback=None) -> List[RevenueModel]:
         """
         Fetches signal revenue statistics.
         """
@@ -92,7 +93,8 @@ class SignalRevenueStatisticsFetcher:
                 kline_fetcher = KLineFetcher()
                 klines_data = kline_fetcher.fetch_klines(
                     token_list=token_list,
-                    duration=duration
+                    duration=duration,
+                    progress_callback=progress_callback
                 )
 
                 # 4. Calculate signal_price and structure data

@@ -132,3 +132,50 @@ class ThreadPoolManager:
         valid_futures = [f for f in futures if f is not None]
         
         return self._wait_for_all_tasks(valid_futures, timeout, show_log=show_log)
+    
+    def execute_tasks_with_progress(self, func: Callable, tasks_args: List[tuple], progress_callback: Callable[[Any], None], timeout: float = None, show_log: bool = True) -> List[Any]:
+        """
+        执行多个任务并在每个任务完成时调用 progress_callback。
+
+        Args:
+            func: 需要执行的函数
+            tasks_args: 参数列表，每个元素都是传递给 func 的参数元组
+            progress_callback: 在单个任务完成后调用，传入该任务的返回值
+            timeout: 等待所有任务完成的超时时间（秒）
+            show_log: 是否打印进度日志
+        """
+        futures = self._submit_multiple_tasks(func, tasks_args)
+        results = []
+        total_tasks = len(futures)
+        completed_tasks = 0
+
+        try:
+            for future in as_completed(futures, timeout=timeout):
+                try:
+                    result = future.result()
+                except Exception as e:
+                    logging.error(f"Task execution failed: {e}")
+                    result = None  # 保持一致的占位
+                results.append(result)
+
+                # 进度统计
+                completed_tasks += 1
+                progress_percentage = (completed_tasks / total_tasks) * 100
+                if show_log:
+                    logging.info(f"任务进度: {completed_tasks}/{total_tasks} ({progress_percentage:.1f}%) 完成 (实时)")
+
+                # 实时回调
+                if progress_callback:
+                    try:
+                        progress_callback(result)
+                    except Exception as cb_err:
+                        logging.error(f"progress_callback raised error: {cb_err}")
+        except TimeoutError:
+            logging.error(f"Tasks did not complete within {timeout} seconds")
+            logging.info(f"超时时已完成: {completed_tasks}/{total_tasks} 个任务")
+            for future in futures:
+                if not future.done():
+                    future.cancel()
+
+        logging.info(f"所有任务执行完毕，共完成 {completed_tasks}/{total_tasks} 个任务")
+        return results
