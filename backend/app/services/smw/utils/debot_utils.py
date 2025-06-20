@@ -1,5 +1,5 @@
 import time
-from typing import Dict, Any, List, Tuple, Optional
+from typing import Dict, Any, List, Tuple, Optional, Union
 import logging
 from datetime import datetime, timezone, timedelta
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -125,7 +125,7 @@ class DebotAPIUtils:
             return []
 
     @staticmethod
-    def get_honeypot_tokens(tokens: List[str], chain: str) -> List[str]:
+    def get_honeypot_tokens(tokens: List[Union[str, Tuple[str, str]]], chain: str) -> List[str]:
         """
         获取貔貅币列表
         
@@ -153,7 +153,11 @@ class DebotAPIUtils:
         
         honeypot_tokens = [token for token, is_honeypot in cached_honeypot_status.items() if is_honeypot]
         
-        tokens_to_check = [token for token in tokens if token not in cached_honeypot_status]
+        # 兼容 tuple 形式，提取 token 地址用于缓存判断
+        def _extract_token(item):
+            return item[0] if isinstance(item, tuple) else item
+
+        tokens_to_check = [item for item in tokens if _extract_token(item) not in cached_honeypot_status]
 
         if not tokens_to_check:
             logging.info(f"All {len(tokens)} tokens for chain {chain} found in cache.")
@@ -162,9 +166,15 @@ class DebotAPIUtils:
             logging.info(f"Found {len(cached_honeypot_status)} cached tokens for chain {chain}. Checking {len(tokens_to_check)} new tokens.")
 
 
-        def is_honeypot_token(token: str, chain: str) -> Optional[Tuple[str, bool]]:
+        def is_honeypot_token(token_info: Union[str, Tuple[str, str]], chain: str) -> Optional[Tuple[str, bool]]:
             """判断代币是否为貔貅币"""
             try:
+                # 解析 token / pair
+                if isinstance(token_info, tuple):
+                    token, pair = token_info
+                else:
+                    token, pair = token_info, None
+
                 # 调用第一个接口：token_analyzer
                 analyzer_url = f"api/token_analyzer/{chain}/{token}"
                 token_analyzer_info = DebotHTTPUtils.get(endpoint=analyzer_url)
@@ -207,6 +217,18 @@ class DebotAPIUtils:
                     if audit:
                         is_honeypot = False
 
+                # 如果是 base 链且携带 pair，则增加额外的 honeypot.is 判断
+                if chain == 'base' and pair:
+                    try:
+                        from backend.app.utils.honeypotis_utils import HoneyPotIsUtils
+                        hp_is_honeypot = HoneyPotIsUtils.is_honeypot(token, pair)
+                        if hp_is_honeypot:
+                            # 直接认定为貔貅
+                            return token, True
+                        # 若为 False 则继续后续逻辑以综合判断
+                    except Exception as _e:
+                        logging.error(f"HoneyPotIsUtils check failed for {token}: {_e}")
+
                 # 最终判断逻辑
                 if official_is_honeypot:
                     final_result = 1
@@ -230,7 +252,7 @@ class DebotAPIUtils:
 
         newly_checked_tokens_to_store = []
         with ThreadPoolManager(max_workers=50) as pool:
-            tasks_args = [(token, chain) for token in tokens_to_check]
+            tasks_args = [(token_info, chain) for token_info in tokens_to_check]
             results = pool.execute_tasks_and_wait(is_honeypot_token, tasks_args)
 
             for result in results:

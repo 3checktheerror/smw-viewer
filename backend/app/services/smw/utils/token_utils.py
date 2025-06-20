@@ -38,11 +38,17 @@ class TokenUtils:
             token_addresses = [item[0] for item in trade_tokens_with_pair]
 
             honeypot_tokens = set()
-            if chain != 'solana':
+            if chain == 'bsc':
                 # 貔貅
                 tokens_for_honeypot_check = [token for token in token_addresses]
                 honeypot_tokens = set(DebotAPIUtils.get_honeypot_tokens(tokens_for_honeypot_check, chain))
-                logging.info(f"{chain}貔貅token数量：{len(honeypot_tokens)}")
+                logging.info(f"bsc貔貅token数量：{len(honeypot_tokens)}")
+            elif chain == 'base':
+                # 对于 base 链，需要 token 和 pair 地址一起判断貔貅
+                honeypot_tokens = set(
+                    DebotAPIUtils.get_honeypot_tokens(trade_tokens_with_pair, chain)
+                )
+                logging.info(f"base貔貅token数量：{len(honeypot_tokens)}")
 
             # 老币
             old_token_results = DebotAPIUtils.get_token_age(chain, token_addresses)
