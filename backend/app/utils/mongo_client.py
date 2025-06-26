@@ -126,7 +126,7 @@ class MongoDBClient:
 
     
     def update_one(self, collection_name: str, filter_dict: Dict[str, Any], 
-                   update_dict: Dict[str, Any], db_name: str = None) -> bool:
+                   update_dict: Dict[str, Any], db_name: str = None, upsert: bool = False) -> bool:
         """更新单个文档"""
         collection = self.get_collection(collection_name, db_name)
         if collection is None:
@@ -136,14 +136,39 @@ class MongoDBClient:
             # 检查update_dict是否已经包含MongoDB操作符
             has_operators = any(key.startswith('$') for key in update_dict.keys())
             if has_operators:
-                result = collection.update_one(filter_dict, update_dict)
+                result = collection.update_one(filter_dict, update_dict, upsert=upsert)
             else:
-                result = collection.update_one(filter_dict, {"$set": update_dict})
+                result = collection.update_one(filter_dict, {"$set": update_dict}, upsert=upsert)
             
-            return result.modified_count > 0
+            return result.modified_count > 0 or result.upserted_id is not None
         except PyMongoError as e:
             logging.error(f"Error updating document in {collection_name}: {e}")
             return False
+    
+    def update_many(self, collection_name: str, filter_dict: Dict[str, Any],
+                    update_dict: Dict[str, Any], db_name: str = None, upsert: bool = False) -> int:
+        """更新多个文档"""
+        collection = self.get_collection(collection_name, db_name)
+        if collection is None:
+            return 0
+
+        try:
+            # 检查update_dict是否已经包含MongoDB操作符
+            has_operators = any(key.startswith('$') for key in update_dict.keys())
+            if has_operators:
+                result = collection.update_many(filter_dict, update_dict, upsert=upsert)
+            else:
+                result = collection.update_many(filter_dict, {"$set": update_dict}, upsert=upsert)
+
+            if result.modified_count > 0 or result.upserted_id is not None:
+                logging.info(f"Updated {result.modified_count} documents in {collection_name}")
+                return result.modified_count
+            else:
+                logging.info(f"No documents were updated in {collection_name}")
+                return 0
+        except PyMongoError as e:
+            logging.error(f"Error updating documents in {collection_name}: {e}")
+            return 0
     
     def delete_one(self, collection_name: str, filter_dict: Dict[str, Any], db_name: str = None) -> bool:
         """删除单个文档"""

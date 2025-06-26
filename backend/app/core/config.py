@@ -84,6 +84,7 @@ class Settings(BaseSettings):
     
     # Debot 平台配置
     debot_api_url: str = Field(default="https://preapi.debot.ai", description="DEBOT_API_URL")
+    debot_app_api_url: str = Field(default="https://app.debot.ai", description="DEBOT_APP_API_URL")
     
     # 日志配置
     log_level: str = Field(default="INFO", description="LOG_LEVEL")
