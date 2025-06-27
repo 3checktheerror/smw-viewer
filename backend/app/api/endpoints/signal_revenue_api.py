@@ -3,7 +3,7 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 from fastapi import APIRouter
 from backend.app.api.schemas.common_schemas import CommonResult
 from backend.app.api.schemas.signal_revenue_schemas import SignalRevenueRequest
-from backend.app.services.asynctask.async_task_service import AsyncProgressService
+from backend.app.services.asynctask.async_task_service import AsyncProgressService, NoSignalsFoundError
 from backend.app.utils.task_stage_utils import TaskStageUtils
 from backend.app.api.schemas.task_schemas import TaskCreateResponse
 
@@ -16,9 +16,12 @@ async def create_signal_revenue_task(request: SignalRevenueRequest):
     try:
         task_id = await AsyncProgressService.create_signal_revenue_task(request)
         return CommonResult().success(data=TaskCreateResponse(task_id=task_id))
+    except NoSignalsFoundError as e:
+        logging.info(f"No signals found for the request, task not created. Reason: {e}")
+        return CommonResult().fail(code=404, description="没有找到符合筛选条件的信号数据")
     except Exception as e:
         logging.error(f"Failed to create async signal revenue task: {e}", exc_info=True)
-        return CommonResult().fail(code=500, description=str(e))
+        return CommonResult().fail(code=500, description=f"创建任务失败: {e}")
 
 
 @router.get("/revenue/daily_signal_progress/{task_id}", response_model=CommonResult, summary="查询信号策略计算进度")
@@ -28,10 +31,11 @@ async def get_signal_revenue_task_progress(task_id: str):
         if progress:
             return CommonResult().success(data=progress)
         else:
-            return CommonResult().fail(description="Task not found or expired")
+            logging.warning(f"Progress for task_id '{task_id}' not found or has expired.")
+            return CommonResult().fail(code=404, description="任务不存在或已过期")
     except Exception as e:
-        logging.error(f"Failed to fetch task progress: {e}", exc_info=True)
-        return CommonResult().fail(code=500, description=str(e))
+        logging.error(f"Failed to fetch task progress for task_id '{task_id}': {e}", exc_info=True)
+        return CommonResult().fail(code=500, description="查询任务进度时发生错误")
 
 
 @router.get("/revenue/daily_signal_result/{task_id}", response_model=CommonResult, summary="获取信号策略计算结果")
@@ -48,16 +52,20 @@ async def get_signal_revenue_result(task_id: str, part: int = 0):
 
     这样可以显著缩短大量分片的读取耗时。
     """
-
     try:
         # 1. 仅获取 meta 信息
         if part == -1:
             meta_data = await TaskStageUtils.get_result_meta(task_id)
             if meta_data is not None:
                 return CommonResult().success(data=meta_data)
-            return CommonResult().fail(description="Result meta not ready")
+            return CommonResult().fail(code=404, description="结果元数据不存在或已过期")
 
-        # 2. 读取所有分片并拼接
+        # 2. 读取所有分片并与 meta 信息拼接
+        meta_data = await TaskStageUtils.get_result_meta(task_id)
+        if meta_data is None:
+            logging.warning(f"Result meta for task_id '{task_id}' not found.")
+            return CommonResult().fail(code=404, description="结果不存在或任务尚未完成")
+
         import asyncio
         from backend.app.utils.thread_pool import ThreadPoolManager
 
@@ -66,42 +74,36 @@ async def get_signal_revenue_result(task_id: str, part: int = 0):
         def _fetch_all_parts_blocking() -> list:
             """阻塞函数：使用 ThreadPoolManager 并发拉取所有分片并返回拼接后的列表。"""
 
-            # 单个 worker 同步函数，用于在线程中调用异步 Redis API
             def _fetch_part(idx: int):
                 import asyncio as _asyncio
-                # 在线程中启动独立事件循环执行协程
                 return _asyncio.run(TaskStageUtils.get_result_part(task_id, idx))
 
             aggregated_results = []
-            idx = 0
+            part_idx = 0
             with ThreadPoolManager(max_workers=10) as manager:
                 while True:
-                    batch_indexes = list(range(idx, idx + 10))  # 一次最多并发 10 个请求
+                    batch_indexes = list(range(part_idx, part_idx + 10))
                     futures = [manager.submit_task(_fetch_part, i) for i in batch_indexes]
-
-                    # 阻塞等待本批次任务完成
+                    
+                    has_data_in_batch = False
                     for fut in futures:
                         part_data = fut.result()
-                        if part_data is None:
-                            # 遇到空分片说明后续也不存在，直接返回
-                            return aggregated_results
-                        aggregated_results.extend(part_data)
+                        if part_data is not None:
+                            aggregated_results.extend(part_data)
+                            has_data_in_batch = True
+                    
+                    if not has_data_in_batch:
+                        # 如果整个批次都没有数据，说明已经读完
+                        break
+                    
+                    part_idx += 10
+            return aggregated_results
 
-                    idx += 10
-
-        # 在默认线程池中执行阻塞函数，避免阻塞事件循环
         token_results: list = await loop.run_in_executor(None, _fetch_all_parts_blocking)
 
-        # 获取 meta 信息（非阻塞，可直接 await）
-        meta_data = await TaskStageUtils.get_result_meta(task_id) or {}
-
-        # 将 token_results 拼接到 meta 并返回
         meta_data["token_results"] = token_results
-
-        if token_results:
-            return CommonResult().success(data=meta_data)
-        return CommonResult().fail(description="Result not ready or part not found")
+        return CommonResult().success(data=meta_data)
 
     except Exception as e:
-        logging.error(f"Failed to fetch task result: {e}", exc_info=True)
-        return CommonResult().fail(code=500, description=str(e))
+        logging.error(f"Failed to fetch task result for task_id '{task_id}': {e}", exc_info=True)
+        return CommonResult().fail(code=500, description="获取任务结果时发生错误")

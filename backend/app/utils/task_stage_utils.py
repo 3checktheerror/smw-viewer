@@ -122,22 +122,32 @@ class TaskStageUtils:
     @classmethod
     async def get_result_meta(cls, task_id: str) -> Optional[Dict[str, Any]]:
         """获取结果的 meta 信息（不含 token_results）。"""
-        import logging
-        try:
-            redis_cli = RedisClient.get_client()
-            val = await redis_cli.get(f"{cls._result_meta_prefix}{task_id}")
-            return json.loads(val) if val else None
-        except Exception as e:
-            logging.error(f"Failed to fetch result meta for {task_id}: {e}")
-            return None
+        import asyncio, logging
+        key = f"{cls._result_meta_prefix}{task_id}"
+        max_retry = 3
+        for i in range(max_retry):
+            try:
+                redis_cli = RedisClient.get_client()
+                val = await redis_cli.get(key)
+                return json.loads(val) if val else None
+            except Exception as e:
+                logging.warning(f"Redis get meta failed (attempt {i+1}/{max_retry}) for {task_id}: {e}")
+                await asyncio.sleep(0.5)
+        logging.error(f"Exceeded retry limit when fetching result meta for {task_id}")
+        return None
 
     @classmethod
     async def get_result_part(cls, task_id: str, index: int) -> Optional[Any]:
-        import logging, json as _json
-        try:
-            redis_cli = RedisClient.get_client()
-            val = await redis_cli.get(f"{cls._result_part_prefix}{task_id}:{index}")
-            return _json.loads(val) if val else None
-        except Exception as e:
-            logging.error(f"Failed to fetch result part {index} for {task_id}: {e}")
-            return None
+        import asyncio, logging, json as _json
+        key = f"{cls._result_part_prefix}{task_id}:{index}"
+        max_retry = 3
+        for i in range(max_retry):
+            try:
+                redis_cli = RedisClient.get_client()
+                val = await redis_cli.get(key)
+                return _json.loads(val) if val else None
+            except Exception as e:
+                logging.warning(f"Redis get part {index} failed (attempt {i+1}/{max_retry}) for {task_id}: {e}")
+                await asyncio.sleep(0.5)
+        logging.error(f"Exceeded retry limit when fetching result part {index} for {task_id}")
+        return None
