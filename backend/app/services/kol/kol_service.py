@@ -16,20 +16,27 @@ class KOLService:
     def get_gmgn_daily_hot_tokens(cls) -> Dict[str, List[str]]:
         mongo_client = MongoDBClient()
         today_str = TimeUtils.get_cur_bg_date()
-        filter_dict = {"store_time": today_str}
+        dune_filter_dict = {
+            "store_time": today_str,
+            "rank": {"$gte": 1, "$lte": 20}
+        }
+        debot_filter_dict = {
+            "store_time": today_str,
+            "dog": {"$ne": None}
+        }
         projection = {"token": 1, "chain": 1, "_id": 0}
 
         dune_docs = mongo_client.find_many(
             collection_name="dune_5047660",
             db_name="graph",
-            filter_dict=filter_dict,
+            filter_dict=dune_filter_dict,
             projection=projection
         )
 
         debot_docs = mongo_client.find_many(
             collection_name="debot_signal",
             db_name="graph",
-            filter_dict=filter_dict,
+            filter_dict=debot_filter_dict,
             projection=projection
         )
 
@@ -93,7 +100,7 @@ class KOLService:
             
             update_payload = {
                 "$set": {k: v for k, v in update_data.items() if v is not None},
-                "$setOnInsert": {"followers_count": 0}
+                "$setOnInsert": {"followers_count": 0, "statuses_count": 0}
             }
             
             mongo_client.update_one(
@@ -145,9 +152,11 @@ class KOLService:
                     
                     # Update followers count
                     followers_count = profile_info.get("followers_count")
+                    statuses_count = profile_info.get("statuses_count")
                     if followers_count is not None:
                         update_payload["followers_count"] = followers_count
-
+                    if statuses_count is not None:
+                        update_payload["statuses_count"] = statuses_count
                     if update_payload:
                         mongo_client.update_one(
                             collection_name="kol_info",
@@ -164,13 +173,13 @@ class KOLService:
 
     @classmethod
     async def _push_kol_data_to_redis(cls):
-        """Pushes KOLs with followers > 5000 to a Redis queue."""
+        """Pushes KOLs with followers > 5000 and statuses_count > 100 to a Redis queue."""
         mongo_client = MongoDBClient()
         kols_to_push = mongo_client.find_many(
             collection_name="kol_info",
             db_name="kol",
-            filter_dict={"followers_count": {"$gt": 5000}},
-            projection={"chain": 1, "avatar": 1, "address": 1, "twitter_username": 1, "twitter_name": 1, "_id": 0}
+            filter_dict={"followers_count": {"$gt": 5000}, "statuses_count": {"$gt": 100}},
+            projection={"chain": 1, "avatar": 1, "address": 1, "twitter_username": 1, "twitter_name": 1, "followers_count": 1, "statuses_count": 1, "_id": 0}
         )
 
         if not kols_to_push:
@@ -194,4 +203,4 @@ class KOLService:
             logging.error(f"Failed to push KOL data to Redis: {e}")
 
 if __name__ == '__main__':
-    pass
+    asyncio.run(KOLService()._push_kol_data_to_redis())
