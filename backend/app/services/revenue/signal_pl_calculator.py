@@ -120,7 +120,10 @@ class SignalRevenueCalculator:
                     "total_revenue": total_revenue,
                     "initial_cost": initial_cost,
                     "final_roi": roi,
-                    "trigger_event": trigger_events
+                    "trigger_event": trigger_events,
+                    "dog": signal_info.dog,
+                    "max_price_ts": signal_info.max_price_ts,
+                    "max_increase": signal_info.max_increase
                 })
 
         # 6. Calculate final summary

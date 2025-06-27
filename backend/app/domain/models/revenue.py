@@ -8,6 +8,9 @@ class RevenueInfoModel(BaseModel):
     signal_time: int
     signal_price: Optional[float] = None
     trigger_event: Optional[List[int]] = None
+    dog: Optional[str] = None
+    max_price_ts: Optional[int] = None
+    max_increase: Optional[float] = None
 
 
 class RevenueModel(BaseModel):
