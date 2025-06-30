@@ -88,7 +88,7 @@ async def get_signal_revenue_result(task_id: str, part: int = 0):
                     has_data_in_batch = False
                     for fut in futures:
                         part_data = fut.result()
-                        if part_data is not None:
+                        if part_data:
                             aggregated_results.extend(part_data)
                             has_data_in_batch = True
                     

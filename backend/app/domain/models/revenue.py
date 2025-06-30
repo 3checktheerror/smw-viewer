@@ -11,6 +11,7 @@ class RevenueInfoModel(BaseModel):
     dog: Optional[str] = None
     max_price_ts: Optional[int] = None
     max_increase: Optional[float] = None
+    signal_count: Optional[int] = None
 
 
 class RevenueModel(BaseModel):

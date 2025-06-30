@@ -123,7 +123,8 @@ class SignalRevenueCalculator:
                     "trigger_event": trigger_events,
                     "dog": signal_info.dog,
                     "max_price_ts": signal_info.max_price_ts,
-                    "max_increase": signal_info.max_increase
+                    "max_increase": signal_info.max_increase,
+                    "signal_count": signal_info.signal_count
                 })
 
         # 6. Calculate final summary

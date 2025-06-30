@@ -39,7 +39,7 @@ class SignalRevenueStatisticsFetcher:
             query["token"] = {"$in": whitelist_tokens}
         elif blacklist_tokens:
             query["token"] = {"$nin": blacklist_tokens}
-        projection = {"chain": 1, "token": 1, "first_signal_time": 1, "store_time": 1, "dog": 1, "max_price_ts": 1, "max_increase": 1}
+        projection = {"chain": 1, "token": 1, "first_signal_time": 1, "store_time": 1, "dog": 1, "max_price_ts": 1, "max_increase": 1, "signal_count": 1}
 
         logging.info(f"Fetching signals from MongoDB with query: {query}")
         all_signals = mongo_client.find_many("debot_signal", query, projection=projection, db_name="graph")
@@ -106,6 +106,7 @@ class SignalRevenueStatisticsFetcher:
                     max_price_ts = signal['max_price_ts']
                     max_increase = signal['max_increase']
                     dog = signal.get('dog')
+                    signal_count = signal.get('signal_count')
 
                     kline_list = klines_data.get(chain, {}).get(token_address)
                     signal_price = None
@@ -134,7 +135,8 @@ class SignalRevenueStatisticsFetcher:
                         signal_price=signal_price,
                         dog=dog,
                         max_price_ts=max_price_ts,
-                        max_increase=max_increase
+                        max_increase=max_increase,
+                        signal_count=signal_count,
                     ))
 
                 date_dt = datetime.strptime(store_time, '%Y-%m-%d')
