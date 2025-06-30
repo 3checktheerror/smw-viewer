@@ -252,12 +252,23 @@ class SMWRepository:
         for token in garbage_tokens:
             chain_garbage_tokens_map[token.chain][token.address] = token
 
+        # 1.5 从MongoDB获取黑名单代币
+        try:
+            bad_tokens_collection = self.mongodb_client.get_collection("bad_tokens", db_name="token")
+            bad_tokens_cursor = bad_tokens_collection.find({}, {"_id": 0, "address": 1, "chain": 1})
+            blacklisted_tokens = {(doc['address'], doc['chain']) for doc in bad_tokens_cursor}
+            logging.info(f"成功获取 {len(blacklisted_tokens)} 个黑名单代币")
+        except Exception as e:
+            logging.error(f"获取黑名单代币失败: {e}")
+            blacklisted_tokens = set()
+
         # 2. 批量获取所有钱包的交易记录
         token_repo = HotTokenRepository()
         all_traded_tokens = token_repo.get_wallets_2d_trade_tokens(wallet_list)
 
         # 3. 识别垃圾钱包
         bad_wallet_keys = set()
+        blacklisted_wallet_count = 0
 
         for wallet in wallet_list:
             wallet_key = (wallet.address, wallet.chain)
@@ -265,6 +276,21 @@ class SMWRepository:
             traded_items = all_traded_tokens.get(wallet.address, [])
             traded_pairs_on_chain = [(token, pair) for token, pair, chain in traded_items if chain == wallet.chain]
 
+            # 新增逻辑：检查是否交易了黑名单代币
+            traded_blacklisted_token = False
+            if blacklisted_tokens:
+                for token_address, _ in traded_pairs_on_chain:
+                    if (token_address, wallet.chain) in blacklisted_tokens:
+                        bad_wallet_keys.add(wallet_key)
+                        blacklisted_wallet_count += 1
+                        logging.info(f"钱包 {wallet.address} on chain {wallet.chain} 因交易了黑名单代币 {token_address} 被过滤")
+                        traded_blacklisted_token = True
+                        break
+            
+            if traded_blacklisted_token:
+                continue
+            
+            # --- 原有逻辑开始 ---
             if not traded_pairs_on_chain:
                 bad_wallet_keys.add(wallet_key)
                 continue
@@ -307,5 +333,6 @@ class SMWRepository:
             final_count = len(final_wallets_by_chain[chain])
             summary_logs.append(f"链 {chain}: 初始 {initial_count} -> 过滤后 {final_count}")
         
+        logging.info(f"因交易黑名单代币过滤掉 {blacklisted_wallet_count} 个钱包")
         logging.info("过滤行为筛选总结:\n" + "\n".join(summary_logs))
         return good_wallets

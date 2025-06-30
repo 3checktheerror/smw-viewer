@@ -2,7 +2,7 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from backend.app.core.config import settings
-from backend.app.api.endpoints import signal_revenue_api, kol_api
+from backend.app.api.endpoints import signal_revenue_api, kol_api, smw_api
 from backend.app.utils.log_utils import setup_logging
 
 app = FastAPI(
@@ -22,6 +22,7 @@ app.add_middleware(
 
 app.include_router(signal_revenue_api.router, prefix="/api", tags=["Signal Revenue"])
 app.include_router(kol_api.router, prefix="/api", tags=["KOL"])
+app.include_router(smw_api.router, prefix="/api", tags=["SMW"])
 
 
 @app.on_event("startup")
