@@ -7,7 +7,6 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import pandas as pd
 from backend.app.services.smw.utils.debot_utils import DebotAPIUtils
 from backend.app.services.smw.smw_lw_st_handler import LowStatisticWalletHandler
-from backend.app.utils.time_utils import TimeUtils
 
 
 class SMWStatisticManager:
@@ -116,11 +115,11 @@ class SMWStatisticManager:
                 for f in as_completed(futures):
                     filtered_data.append(f.result())
 
-        logging.info(
-            f"稳定币修正完成:\n"
-            f"更新地址列表({updated_count}条):\n{updated_addresses}\n"
-            f"失败地址列表({error_count}条):\n{error_addresses}"
-        )
+        # logging.info(
+        #     f"稳定币修正完成:\n"
+        #     f"更新地址列表({updated_count}条):\n{updated_addresses}\n"
+        #     f"失败地址列表({error_count}条):\n{error_addresses}"
+        # )
 
         def get_volume_group(avg_buy: float) -> str:
             """获取交易量分组标签 (修正版)"""
@@ -158,8 +157,11 @@ class SMWStatisticManager:
             avg_volume=('avg_buy_volume_7d', lambda x: round(x.mean(), 2))
         ).reset_index()
 
-        report_dir = os.path.join(os.path.dirname(__file__), 'report')
-        os.makedirs(report_dir, exist_ok=True)
-        report_path = os.path.join(report_dir, f"daily_avg_buy_{TimeUtils.get_cur_date()}.csv")
-        stats_df.to_csv(report_path, index=False, encoding='utf-8')
-        logging.info(f"平均购买统计数据已保存至 {report_path}")
+        # report_dir = os.path.join(os.path.dirname(__file__), 'report')
+        # os.makedirs(report_dir, exist_ok=True)
+        # report_path = os.path.join(report_dir, f"daily_avg_buy_{TimeUtils.get_cur_date()}.csv")
+        # stats_df.to_csv(report_path, index=False, encoding='utf-8')
+        # logging.info(f"平均购买统计数据已保存至 {report_path}")
+
+        # 返回统计数据
+        return stats_df.to_dict(orient='records')

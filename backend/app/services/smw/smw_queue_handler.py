@@ -7,7 +7,7 @@ from backend.app.core.config import settings
 from backend.app.domain.models.wallet import WalletModel
 from backend.app.services.smw.smw_filter_manager import SMWFilterManager
 from backend.app.services.smw.smw_filter_utils import SMWFilterUtils
-from backend.app.services.smw.smw_statistic_manager import SMWStatisticManager
+from backend.app.services.smw.smw_incremental_manager import SMWIncrementalManager
 from backend.app.utils.mongo_client import MongoDBClient
 from backend.app.utils.time_utils import TimeUtils
 from collections import defaultdict
@@ -37,8 +37,8 @@ class SMWQueueHandlerTask:
     @staticmethod
     def cleanup():
         mongo_client = MongoDBClient()
-        three_days_ago = TimeUtils.get_3_days_ago_date()
-        filter_dict = {"stored_date": {"$lt": three_days_ago}}
+        five_days_ago = TimeUtils.get_5_days_ago_bg_date()
+        filter_dict = {"stored_date": {"$lt": five_days_ago}}
 
         logging.info("Cleaning up old documents...")
 
@@ -48,21 +48,21 @@ class SMWQueueHandlerTask:
             db_name='token',
             filter_dict=filter_dict
         )
-        logging.info(f"Deleted {deleted_count_honeypot} documents from honeypot older than {three_days_ago}.")
+        logging.info(f"Deleted {deleted_count_honeypot} documents from honeypot older than {five_days_ago}.")
 
         deleted_count_honeypot = mongo_client.delete_many(
             collection_name='onchain_token',
             db_name='token',
             filter_dict=filter_dict
         )
-        logging.info(f"Deleted {deleted_count_honeypot} documents from onchain_token older than {three_days_ago}.")
+        logging.info(f"Deleted {deleted_count_honeypot} documents from onchain_token older than {five_days_ago}.")
 
         deleted_count_honeypot = mongo_client.delete_many(
             collection_name='rank_token',
             db_name='token',
             filter_dict=filter_dict
         )
-        logging.info(f"Deleted {deleted_count_honeypot} documents from rank_token older than {three_days_ago}.")
+        logging.info(f"Deleted {deleted_count_honeypot} documents from rank_token older than {five_days_ago}.")
 
         # Cleanup old report files
         logging.info("Cleaning up old report files...")
@@ -98,6 +98,31 @@ class SMWQueueHandlerTask:
 
         report_data = {}
         logging.info(f"SMW Queue processing started for date: {in_date}")
+
+        # 0. 从 history.smw_history 中筛除历史钱包
+        if new_wallets:
+            history_wallets = mongo_client.find_many(
+                collection_name="smw_history",
+                filter_dict={},
+                projection={"address": 1, "chain": 1},
+                db_name="history"
+            )
+
+            whitelist_set = {
+                (rec.get("address"), rec.get("chain"))
+                for rec in history_wallets
+                if rec.get("address") and rec.get("chain")
+            }
+
+            if whitelist_set:
+                original_len = len(new_wallets)
+                new_wallets[:] = [
+                    w for w in new_wallets
+                    if (w.get("address"), w.get("chain")) not in whitelist_set
+                ]
+                removed_cnt = original_len - len(new_wallets)
+                if removed_cnt:
+                    logging.info(f"Filtered out {removed_cnt} wallets from history.")
 
         # 1. Get initial state of all queues for reporting and processing
         initial_wallets_docs = {q_name: mongo_client.find_many(collection_name=q_name, db_name=q_db) for q_name in queues}
@@ -180,10 +205,10 @@ class SMWQueueHandlerTask:
         # 7. Generate SMW buy statistics for the new state of queue_1
         logging.info("Generating SMW buy statistics for queue_1...")
         q1_updated_data = mongo_client.find_many(collection_name=q1_name, db_name=q_db)
-        if q1_updated_data:
-            SMWStatisticManager.get_smw_avg_buy_statistics(wallet_data_list=q1_updated_data)
-        else:
-            logging.info("Queue 1 is empty. Skipping statistics generation.")
+        # if q1_updated_data:
+        #     SMWStatisticManager.get_smw_avg_buy_statistics(wallet_data_list=q1_updated_data)
+        # else:
+        #     logging.info("Queue 1 is empty. Skipping statistics generation.")
 
         # 8. Capture the final state of each queue for reporting
         q2_updated_data = mongo_client.find_many(collection_name=q2_name, db_name=q_db)
@@ -194,6 +219,58 @@ class SMWQueueHandlerTask:
 
         # 9. Generate and write the final report
         SMWQueueHandlerTask._write_report(report_data)
+
+        # 10. Generate incremental wallets
+        SMWIncrementalManager.generate_incremental_wallets()
+
+        # 11. 根据最新过滤结果更新 history.smw_history 的 out_tag
+        logging.info("Updating out_tag for history wallets...")
+
+        history_records = mongo_client.find_many(
+            collection_name="smw_history",
+            filter_dict={"out_tag": {"$ne": 4}},
+            projection={"address": 1, "chain": 1},
+            db_name="history"
+        )
+
+        if history_records:
+            history_wallet_models = [
+                WalletModel(chain=rec.get("chain"), address=rec.get("address"))
+                for rec in history_records
+                if rec.get("address") and rec.get("chain")
+            ]
+
+            if history_wallet_models:
+                res_wallets, low_stat_wallets, tx_bad_wallets = SMWFilterUtils.start_filter(
+                    history_wallet_models, is_daily_fetch=False
+                )
+
+                def _update_tag(wallet_list: List[WalletModel], tag: int):
+                    if not wallet_list:
+                        return 0
+                    filter_cond = {
+                        "$or": [
+                            {"address": w.address, "chain": w.chain}
+                            for w in wallet_list
+                        ]
+                    }
+                    return mongo_client.update_many(
+                        collection_name="smw_history",
+                        filter_dict=filter_cond,
+                        update_dict={"out_tag": tag},
+                        db_name="history"
+                    )
+
+                updated_low = _update_tag(low_stat_wallets, 2)
+                updated_tx = _update_tag(tx_bad_wallets, 3)
+                updated_res = _update_tag(res_wallets, 1)
+
+                logging.info(
+                    "History wallets out_tag updated. low_statistic=%s, bad_tx=%s, normal=%s",
+                    updated_low, updated_tx, updated_res
+                )
+        else:
+            logging.info("No history wallets found for out_tag update.")
 
         logging.info("Daily queue shuffle and supply process finished.")
 

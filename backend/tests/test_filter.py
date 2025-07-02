@@ -16,7 +16,7 @@ def initialize_bad_tokens_collection():
     try:
         mongo_client = MongoDBClient()
         db_name = 'history'
-        collection_name = 'smw_history'
+        collection_name = 'smw_incremental'
         
         db = mongo_client._get_database(db_name)
         if db is None:
@@ -48,7 +48,7 @@ def insert_mock_data():
     logging.info("Attempting to insert mock bad tokens...")
     try:
         mongo_client = MongoDBClient()
-        collection = mongo_client.get_collection("smw_history", db_name="history")
+        collection = mongo_client.get_collection("smw_incremental", db_name="history")
         if collection is None:
             logging.error("Failed to get 'bad_tokens' collection for mock data insertion.")
             return
@@ -60,7 +60,7 @@ def insert_mock_data():
             {"address": "BFPLjqdwtBxQT1hL3aam6qRzbLykNnjLTpwwfyzBZaim", "chain": "solana"},
         ]
 
-        documents = [{**token, "store_date": TimeUtils.get_cur_bg_date(), "out_tag": 1} for token in mock_tokens]
+        documents = [{**token, "store_date": TimeUtils.get_cur_bg_date()} for token in mock_tokens]
 
         try:
             result = collection.insert_many(documents, ordered=False)
@@ -78,6 +78,6 @@ def insert_mock_data():
 
 if __name__ == "__main__":
     logging.info("Running bad_tokens collection initialization script...")
-    initialize_bad_tokens_collection()
+    # initialize_bad_tokens_collection()
     insert_mock_data()
     logging.info("Script finished.")

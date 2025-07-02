@@ -50,6 +50,26 @@ class TimeUtils:
         return yesterday_shanghai.strftime('%Y-%m-%d')
 
     @staticmethod
+    def get_2_days_ago_bg_date() -> str:
+        yesterday_shanghai = datetime.now(ZoneInfo("Asia/Shanghai")) - timedelta(days=2)
+        return yesterday_shanghai.strftime('%Y-%m-%d')
+
+    @staticmethod
+    def get_3_days_ago_bg_date() -> str:
+        yesterday_shanghai = datetime.now(ZoneInfo("Asia/Shanghai")) - timedelta(days=3)
+        return yesterday_shanghai.strftime('%Y-%m-%d')
+
+    @staticmethod
+    def get_4_days_ago_bg_date() -> str:
+        four_days_ago_shanghai = datetime.now(ZoneInfo("Asia/Shanghai")) - timedelta(days=4)
+        return four_days_ago_shanghai.strftime('%Y-%m-%d')
+
+    @staticmethod
+    def get_5_days_ago_bg_date() -> str:
+        five_days_ago_shanghai = datetime.now(ZoneInfo("Asia/Shanghai")) - timedelta(days=5)
+        return five_days_ago_shanghai.strftime('%Y-%m-%d')
+
+    @staticmethod
     def get_prev_date() -> str:
         yesterday_shanghai = datetime.now(timezone.utc) - timedelta(days=1)
         return yesterday_shanghai.strftime('%Y-%m-%d')
