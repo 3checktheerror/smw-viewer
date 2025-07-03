@@ -6,6 +6,7 @@ from pymongo.errors import BulkWriteError
 from backend.app.api.schemas.common_schemas import CommonResult
 from backend.app.api.schemas.token_schemas import BadTokenAddRequest, BadTokenDeleteRequest, BadTokenInfo
 from backend.app.api.schemas.wallet_schemas import WalletOperation, SMWHistoryModel, SMWIncrementalModel, WalletAddress
+from backend.app.api.schemas.kol_schemas import KOLInfo
 from backend.app.utils.mongo_client import MongoDBClient
 from backend.app.utils.time_utils import TimeUtils
 from backend.app.services.smw.smw_daily_service import SMWDailyService
@@ -212,3 +213,27 @@ def delete_history_wallets(request: List[WalletAddress]):
     except Exception as e:
         logging.error(f"Error deleting history wallets: {e}")
         raise HTTPException(status_code=500, detail="Failed to delete history wallets.")
+
+@router.get("/kol_info/list", summary="List all KOL info", response_model=CommonResult[List[KOLInfo]])
+def list_kol_info():
+    """Retrieve all KOL information records from the kol_info collection."""
+    mongo_client = MongoDBClient()
+    try:
+        infos = mongo_client.find_many(
+            collection_name="kol_info",
+            db_name="kol",
+            projection={
+                "chain": 1,
+                "address": 1,
+                "twitter_username": 1,
+                "twitter_name": 1,
+                "avatar": 1,
+                "followers_count": 1,
+                "statuses_count": 1,
+                "_id": 0,
+            },
+        )
+        return CommonResult().success(data=infos)
+    except Exception as e:
+        logging.error(f"Error fetching KOL info: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch KOL info.")

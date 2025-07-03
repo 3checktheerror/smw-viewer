@@ -12,9 +12,12 @@ from backend.app.services.smw.utils.alchemy_utils import AlchemyUtils
 
 
 class LowStatisticWalletHandler:
+    _ck_client = None
 
     def __init__(self):
-        self.ck_client = ClickHouseClient()
+        if LowStatisticWalletHandler._ck_client is None:
+            LowStatisticWalletHandler._ck_client = ClickHouseClient()
+        self.ck_client = LowStatisticWalletHandler._ck_client
 
     @staticmethod
     def meets_criteria(market_data: dict, chain: str, is_second_check: bool = True, is_daily_fetch = True) -> bool:
