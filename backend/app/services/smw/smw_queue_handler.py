@@ -43,26 +43,33 @@ class SMWQueueHandlerTask:
         logging.info("Cleaning up old documents...")
 
         # Cleanup honeypot in token db
-        deleted_count_honeypot = mongo_client.delete_many(
+        deleted_count = mongo_client.delete_many(
             collection_name='honeypot',
             db_name='token',
             filter_dict=filter_dict
         )
-        logging.info(f"Deleted {deleted_count_honeypot} documents from honeypot older than {five_days_ago}.")
+        logging.info(f"Deleted {deleted_count} documents from honeypot older than {five_days_ago}.")
 
-        deleted_count_honeypot = mongo_client.delete_many(
+        deleted_count = mongo_client.delete_many(
             collection_name='onchain_token',
             db_name='token',
             filter_dict=filter_dict
         )
-        logging.info(f"Deleted {deleted_count_honeypot} documents from onchain_token older than {five_days_ago}.")
+        logging.info(f"Deleted {deleted_count} documents from onchain_token older than {five_days_ago}.")
 
-        deleted_count_honeypot = mongo_client.delete_many(
+        deleted_count = mongo_client.delete_many(
             collection_name='rank_token',
             db_name='token',
             filter_dict=filter_dict
         )
-        logging.info(f"Deleted {deleted_count_honeypot} documents from rank_token older than {five_days_ago}.")
+        logging.info(f"Deleted {deleted_count} documents from rank_token older than {five_days_ago}.")
+
+        deleted_count = mongo_client.delete_many(
+            collection_name='smw_incremental',
+            db_name='history',
+            filter_dict={"store_date": {"$lt": five_days_ago}}
+        )
+        logging.info(f"Deleted {deleted_count} documents from smw_incremental older than {five_days_ago}.")
 
         # Cleanup old report files
         logging.info("Cleaning up old report files...")
